@@ -1,0 +1,15 @@
+<div class="fc-float-label">
+  <input
+    [id]="id"
+    [type]="type"
+    [name]="name"
+    [placeholder]="placeholder"
+    [disabled]="disabled"
+    [(ngModel)]="value"
+    (focus)="isFocused = true"
+    (blur)="isFocused = false; onTouched()"
+    (input)="handleInput($event)"
+    class="fc-input-text"
+  />
+  <label [for]="id" class="fc-label" [class.fc-label-float]="isFocused || value">{{ label }}</label>
+</div>

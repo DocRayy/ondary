@@ -1,0 +1,450 @@
+<div
+  *ngIf="visible"
+  appGsapModal
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-2"
+  role="presentation"
+  (click)="onVisibleChange(false)"
+>
+  <section
+    class="min-h-[min(685px,calc(100vh-16px))] w-[min(1310px,calc(100vw-16px))] rounded-xl bg-[#1E293B] px-10 py-7 text-white shadow-2xl max-md:min-h-[calc(100vh-16px)] max-md:px-5"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="flex items-start justify-between gap-6 max-md:flex-col max-md:items-stretch">
+      <div class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <input
+          type="text"
+          maxlength="150"
+          [(ngModel)]="form.title"
+          [readonly]="isReadonly"
+          class="fc-unstyled-input min-w-60 flex-1 border-0 bg-transparent p-0 text-2xl font-extrabold leading-tight text-white outline-none"
+          aria-label="Task title"
+        />
+        <span
+          *ngFor="let label of selectedLabels"
+          class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1"
+          [ngClass]="getTaskLabelBadgeClass(label.color)"
+        >
+          {{ label.name }}
+        </span>
+      </div>
+
+      <div class="flex items-start gap-3 max-md:w-full">
+        <div class="relative w-[220px] max-md:flex-1" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            class="flex h-[30px] w-full items-center justify-between rounded-md border-0 bg-[#d9d9d9] px-4 text-left text-xs text-black outline-none"
+            [disabled]="isReadonly"
+            aria-haspopup="listbox"
+            [attr.aria-expanded]="isLabelComboboxOpen"
+            (click)="toggleLabelCombobox()"
+          >
+            <span>{{
+              selectedLabels.length ? selectedLabels.length + ' labels selected' : 'Add Label'
+            }}</span>
+            <span class="text-2xs">v</span>
+          </button>
+
+          <div
+            *ngIf="isLabelComboboxOpen"
+            class="absolute right-0 z-10 mt-2 max-h-64 w-full overflow-auto rounded-md bg-primary-500 p-2 text-xs text-white shadow-xl"
+            role="listbox"
+            aria-label="Task labels"
+          >
+            <div
+              *ngIf="isLoadingTaskLabels"
+              class="px-2 py-3 text-center font-semibold text-neutral-500"
+            >
+              Loading...
+            </div>
+            <div
+              *ngIf="!isLoadingTaskLabels && !taskLabels.length"
+              class="px-2 py-3 text-center font-semibold text-neutral-500"
+            >
+              No labels found.
+            </div>
+            <button
+              *ngFor="let label of taskLabels"
+              type="button"
+              class="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-primary-100"
+              role="option"
+              [attr.aria-selected]="isTaskLabelSelected(label)"
+              (click)="toggleTaskLabel(label)"
+            >
+              <input
+                type="checkbox"
+                class="h-4 w-4"
+                [checked]="isTaskLabelSelected(label)"
+                (change)="toggleTaskLabel(label)"
+                (click)="$event.stopPropagation()"
+              />
+              <span
+                class="rounded-full px-2.5 py-1 text-[11px] font-bold ring-1"
+                [ngClass]="getTaskLabelBadgeClass(label.color)"
+              >
+                {{ label.name }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <button
+          *ngIf="task?.id && !isReadonly"
+          type="button"
+          class="h-[30px] rounded-md border-0 bg-red-100 px-4 text-xs font-bold text-red-700 transition hover:bg-red-200"
+          [disabled]="isDeleting"
+          (click)="openDeleteDialog()"
+        >
+          Delete
+        </button>
+      </div>
+    </header>
+
+    <div
+      class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-white max-md:flex-col max-md:items-stretch"
+    >
+      <label class="flex items-center gap-3 max-md:flex-col max-md:items-stretch">
+        <span>On project</span>
+        <select
+          [(ngModel)]="selectedProject"
+          [disabled]="isReadonly"
+          class="h-[30px] w-[225px] rounded-md border-0 bg-primary-200 px-3 text-xs text-white outline-none max-md:w-full"
+        >
+          <option [ngValue]="undefined">
+            {{ isLoadingProjects ? 'Loading...' : 'Select Project' }}
+          </option>
+          <option *ngFor="let project of projects" [ngValue]="project">
+            {{ getProjectName(project) }}
+          </option>
+        </select>
+      </label>
+
+      <label class="flex items-center gap-3 max-md:flex-col max-md:items-stretch">
+        <span>Due</span>
+        <input
+          type="date"
+          [(ngModel)]="selectedDueDate"
+          [disabled]="isReadonly"
+          class="h-[30px] w-[200px] rounded-md border-0 bg-primary-200 px-3 text-xs text-white outline-none max-md:w-full"
+        />
+      </label>
+
+      <div class="flex min-h-[30px] items-center gap-3 max-md:flex-wrap">
+        <span>Members</span>
+        <ng-container *ngFor="let user of selectedUsers">
+          <button
+            type="button"
+            class="flex max-w-[180px] items-center gap-2 rounded-full bg-primary-200 px-3 py-1.5 text-xs font-semibold text-white"
+            [disabled]="isReadonly"
+            [attr.aria-label]="'Remove ' + getUserLabel(user)"
+            (click)="removeSelectedUser(user)"
+          >
+            <span class="truncate">{{ getUserLabel(user) }}</span>
+            <fc-icon icon="close-linear" class="text-2xs text-white"></fc-icon>
+          </button>
+        </ng-container>
+        <button
+          type="button"
+          class="grid h-6 w-6 place-items-center rounded-full border-0 bg-primary-200 text-sm leading-none text-white"
+          [disabled]="isReadonly"
+          aria-label="Add member"
+          (click)="openUserDialog()"
+        >
+          +
+        </button>
+      </div>
+    </div>
+
+    <textarea
+      [(ngModel)]="form.description"
+      [readonly]="isReadonly"
+      placeholder="Description"
+      class="mt-7 h-[108px] w-full resize-none rounded-md border-0 bg-[#d9d9d9] px-7 py-3 text-xs text-black outline-none placeholder:text-neutral-700"
+    ></textarea>
+
+    <div class="relative mt-6 flex items-center gap-4 text-sm text-white">
+      <strong>Todo</strong>
+      <button
+        type="button"
+        class="h-[30px] w-[146px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
+        [disabled]="isReadonly"
+        (click)="openTodoDialog()"
+      >
+        + Add task todo
+      </button>
+
+      <div
+        *ngIf="isTodoDialogOpen"
+        class="absolute left-[58px] top-9 z-20 w-[min(420px,calc(100vw-48px))] rounded-lg bg-primary-300 p-4 text-white shadow-2xl"
+        (click)="$event.stopPropagation()"
+      >
+        <label class="block text-xs font-bold text-white">
+          Title task todo
+          <input
+            type="text"
+            [(ngModel)]="todoForm.label"
+            class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
+            placeholder="Task todo title"
+          />
+        </label>
+
+        <label class="mt-4 block text-xs font-bold text-white">
+          Assign user
+          <select
+            [(ngModel)]="todoForm.user"
+            class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
+          >
+            <option [ngValue]="undefined">
+              {{ isLoadingUsers ? 'Loading users...' : 'Select user' }}
+            </option>
+            <option *ngFor="let user of getTodoAssignableUsers()" [ngValue]="user">
+              {{ getUserLabel(user) }}
+            </option>
+          </select>
+        </label>
+
+        <p *ngIf="todoErrorMessage" class="mt-3 text-xs font-bold text-red-600">
+          {{ todoErrorMessage }}
+        </p>
+
+        <div class="mt-4 flex justify-end gap-3">
+          <button
+            type="button"
+            class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
+            (click)="closeTodoDialog()"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black disabled:cursor-not-allowed disabled:opacity-70"
+            [disabled]="isAddingTodo"
+            (click)="addTaskTodo()"
+          >
+            {{ isAddingTodo ? 'Adding...' : 'Add' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      *ngIf="isLoadingTaskTodos"
+      class="mt-4 rounded-lg bg-neutral-100 px-4 py-3 text-xs font-bold text-neutral-600"
+    >
+      Loading task todos...
+    </div>
+
+    <div class="mt-5 rounded-lg px-4 py-3">
+      <div class="flex items-center justify-between text-xs font-bold text-white">
+        <span>Task progress</span>
+        <span>{{ getTaskProgress() }}%</span>
+      </div>
+      <div class="mt-2 h-2 overflow-hidden rounded-full bg-white">
+        <div class="h-full rounded-full bg-[#2F4156]" [style.width.%]="getTaskProgress()"></div>
+      </div>
+    </div>
+
+    <div *ngIf="taskTodos.length" class="mt-5 max-h-[260px] space-y-4 overflow-y-auto pr-1">
+      <article
+        *ngFor="let todo of taskTodos"
+        class="relative min-h-[172px] rounded-xl border border-[#2F4156] px-5 py-4"
+      >
+        <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
+          <span
+            class="grid h-11 w-11 place-items-center rounded-full bg-primary-200 text-sm font-bold text-white"
+          >
+            {{ getUserInitial(todo.user) }}
+          </span>
+
+          <div class="min-w-0">
+            <div class="flex items-start gap-4">
+              <div class="min-w-[220px] max-w-[300px]">
+                <h3 class="truncate text-sm font-bold text-white">{{ todo.label }}</h3>
+                <p class="mt-1 text-xs font-bold text-white">{{ getTodoAssigneeLabel(todo) }}</p>
+              </div>
+              <div class="mt-4 hidden flex-1 border-t border-dashed border-white md:block"></div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] text-xs text-white">
+              <span>{{ getTodoCreatedTime(todo) }}</span>
+              <span class="row-span-3 w-1 rounded-full bg-white"></span>
+              <span>Created todo</span>
+
+              <span></span>
+              <span class="py-5 text-sm font-bold">{{ getTodoDuration(todo) }}</span>
+
+              <span>{{ getTodoUpdatedTime(todo) }}</span>
+              <span>Updated todo</span>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-end gap-3">
+            <span
+              class="h-fit rounded-full bg-tertiary-200 px-4 py-1.5 text-2xs font-bold text-black"
+              [class.bg-green-100]="todo.status === 'completed'"
+              [class.text-green-800]="todo.status === 'completed'"
+              [class.bg-yellow-100]="todo.status === 'progress'"
+              [class.text-yellow-800]="todo.status === 'progress'"
+            >
+              {{ getTodoStatusLabel(todo) }}
+            </span>
+            <span
+              *ngIf="isTodoFinishedTimelog(todo); else timelogActionButton"
+              class="rounded-md bg-green-100 px-4 py-2 text-2xs font-bold text-green-800"
+            >
+              Finished
+            </span>
+            <ng-template #timelogActionButton>
+              <button
+                type="button"
+                class="rounded-md bg-primary-200 px-4 py-2 text-2xs font-bold text-white transition hover:bg-primary-300 disabled:cursor-not-allowed disabled:opacity-60"
+                [disabled]="!canCreateTimelog(todo) || activeTimelogService.isEnding()"
+                (click)="createTimelogForTodo(todo)"
+              >
+                {{
+                  isTodoActiveTimelog(todo)
+                    ? activeTimelogService.isEnding()
+                      ? 'Ending...'
+                      : 'End timelog'
+                    : creatingTimelogTodoId === todo.id
+                      ? 'Creating...'
+                      : 'Create timelog'
+                }}
+              </button>
+            </ng-template>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <p *ngIf="errorMessage" class="mt-4 text-sm font-bold text-red-600">{{ errorMessage }}</p>
+
+    <footer class="mt-6 flex justify-end gap-4 max-md:flex-col">
+      <button
+        type="button"
+        class="h-11 w-[156px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black max-md:w-full"
+        (click)="onVisibleChange(false)"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="h-11 w-[156px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black disabled:cursor-not-allowed disabled:opacity-70 max-md:w-full"
+        [disabled]="isSaving || isReadonly"
+        (click)="saveTask()"
+      >
+        {{ isSaving ? 'Saving...' : task ? 'Update' : 'Save' }}
+      </button>
+    </footer>
+  </section>
+</div>
+
+<div
+  *ngIf="isDeleteDialogOpen"
+  appGsapModal
+  class="fixed inset-0 z-90 flex items-center justify-center bg-black/30 px-4"
+  role="presentation"
+  (click)="closeDeleteDialog()"
+>
+  <section
+    class="w-[min(420px,calc(100vw-32px))] rounded-xl bg-white p-6 text-black shadow-2xl"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <h2 class="text-lg font-extrabold">Delete Task</h2>
+    <p class="mt-3 text-sm font-medium text-neutral-700">
+      Are you sure you want to delete this task?
+    </p>
+
+    <div class="mt-6 flex justify-end gap-3">
+      <button
+        type="button"
+        class="h-10 rounded-md bg-neutral-100 px-5 text-sm font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-70"
+        [disabled]="isDeleting"
+        (click)="closeDeleteDialog()"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="h-10 rounded-md bg-tertiary-300 px-5 text-sm font-bold text-tertiary-800 transition hover:bg-tertiary-400 disabled:cursor-not-allowed disabled:opacity-70"
+        [disabled]="isDeleting"
+        (click)="confirmDeleteTask()"
+      >
+        {{ isDeleting ? 'Deleting...' : 'Delete' }}
+      </button>
+    </div>
+  </section>
+</div>
+
+<div
+  *ngIf="isUserDialogOpen"
+  appGsapModal
+  class="fixed inset-0 z-60 flex items-center justify-center bg-black/30 p-4"
+  role="presentation"
+  (click)="closeUserDialog()"
+>
+  <section
+    class="max-h-[calc(100vh-48px)] w-[min(560px,calc(100vw-32px))] overflow-auto rounded-lg bg-white p-5 text-black shadow-2xl"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="mb-4 flex items-center justify-between gap-4">
+      <h3 class="m-0 text-lg font-extrabold text-black">Select Member</h3>
+      <button
+        type="button"
+        class="grid h-6 w-6 place-items-center rounded-full border-0 bg-[#d9d9d9] text-xs text-black"
+        aria-label="Close member dialog"
+        (click)="closeUserDialog()"
+      >
+        X
+      </button>
+    </header>
+
+    <div *ngIf="isLoadingUsers" class="py-8 text-center text-sm font-bold text-neutral-600">
+      Loading users...
+    </div>
+    <div
+      *ngIf="!isLoadingUsers && !users.length"
+      class="py-8 text-center text-sm font-bold text-neutral-600"
+    >
+      No users found.
+    </div>
+
+    <div
+      *ngIf="!isLoadingUsers && users.length"
+      class="overflow-hidden rounded-lg border border-[#d9d9d9]"
+    >
+      <button
+        *ngFor="let user of users"
+        type="button"
+        class="grid w-full grid-cols-[auto_1fr_1.4fr] items-center gap-4 border-0 border-b border-[#d9d9d9] bg-white px-4 py-3 text-left text-sm text-black last:border-b-0 hover:bg-neutral-100"
+        [class.bg-neutral-100]="isUserSelected(user)"
+        (click)="toggleUser(user)"
+      >
+        <input
+          type="checkbox"
+          class="h-4 w-4"
+          [checked]="isUserSelected(user)"
+          (change)="toggleUser(user)"
+          (click)="$event.stopPropagation()"
+        />
+        <span>{{ user.username }}</span>
+        <span class="truncate">{{ user.email }}</span>
+      </button>
+    </div>
+
+    <footer class="mt-5 flex justify-end">
+      <button
+        type="button"
+        class="h-9 w-[120px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
+        (click)="closeUserDialog()"
+      >
+        Done
+      </button>
+    </footer>
+  </section>
+</div>

@@ -1,0 +1,60 @@
+<aside class="sticky top-0 flex h-dvh w-60 flex-col bg-[#1A2026] px-6 py-6 text-[#D9D9D9]">
+  <div class="flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold">
+    <img src="images/ondary-logo-white.png" alt="Ondary" class="h-12 w-auto" />
+  </div>
+
+  <nav class="mt-10 flex-1 space-y-2">
+    <a
+      *ngFor="let item of visibleNavItems"
+      [routerLink]="item.route"
+      routerLinkActive="bg-tertiary-50 text-tertiary-700"
+      [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+      class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-[#D9D9D9] transition hover:bg-tertiary-100 hover:text-tertiary-700"
+    >
+      <span>{{ item.label }}</span>
+    </a>
+  </nav>
+
+  <button
+    type="button"
+    class="mt-auto flex items-center justify-center rounded-2xl bg-tertiary-300 px-4 py-3 text-sm font-semibold text-tertiary-700 transition hover:bg-tertiary-400"
+    (click)="openLogoutDialog()"
+  >
+    Logout
+  </button>
+</aside>
+
+<div
+  *ngIf="isLogoutDialogOpen"
+  appGsapModal
+  class="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 px-4"
+  role="presentation"
+  (click)="closeLogoutDialog()"
+>
+  <section
+    class="w-[min(420px,calc(100vw-32px))] rounded-xl bg-white p-6 text-black shadow-2xl"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <h2 class="text-lg font-extrabold">Logout</h2>
+    <p class="mt-3 text-sm font-medium text-neutral-700">Are you sure you want to logout?</p>
+
+    <div class="mt-6 flex justify-end gap-3">
+      <button
+        type="button"
+        class="h-10 rounded-md bg-neutral-100 px-5 text-sm font-bold text-black transition hover:bg-neutral-200"
+        (click)="closeLogoutDialog()"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="h-10 rounded-md bg-tertiary-300 px-5 text-sm font-bold text-tertiary-800 transition hover:bg-tertiary-400"
+        (click)="confirmLogout()"
+      >
+        Logout
+      </button>
+    </div>
+  </section>
+</div>

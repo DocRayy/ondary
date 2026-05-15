@@ -1,0 +1,115 @@
+<section class="min-h-[calc(100dvh-120px)] pr-8 text-black">
+  <header class="flex items-center gap-3">
+    <a
+      routerLink="/members/list"
+      class="grid h-8 w-8 place-items-center rounded-full bg-white text-black shadow-sm transition hover:bg-tertiary-100"
+      aria-label="Back"
+    >
+      <fc-icon icon="arrow-left-linear" class="text-lg"></fc-icon>
+    </a>
+    <h1 class="text-base font-extrabold text-white">Member Add</h1>
+  </header>
+
+  <form class="mt-6 space-y-5" (ngSubmit)="submit()">
+    <div
+      *ngFor="let form of forms; let i = index; trackBy: trackForm"
+      class="grid gap-6 rounded-xl bg-transparent md:grid-cols-[96px_minmax(0,1fr)_auto]"
+    >
+      <div class="space-y-2">
+        <div class="grid h-24 w-24 place-items-center overflow-hidden rounded-md bg-[#D9D9D9] text-[#2E2E34]">
+          <img
+            *ngIf="form.photoPreview; else addPhotoPlaceholder"
+            [src]="form.photoPreview"
+            alt="Member photo preview"
+            class="h-full w-full object-cover"
+          />
+          <ng-template #addPhotoPlaceholder>
+            <fc-icon icon="user-linear" class="text-5xl"></fc-icon>
+          </ng-template>
+        </div>
+        <label class="grid h-8 w-24 cursor-pointer place-items-center rounded-md bg-[#D9D9D9] text-[10px] font-bold text-black">
+          Upload Photo
+          <input
+            type="file"
+            class="sr-only"
+            [attr.accept]="imageAccept"
+            (change)="onPhotoChange($event, form)"
+          />
+        </label>
+      </div>
+
+      <div class="grid gap-2">
+        <input
+          name="username-{{ i }}"
+          [(ngModel)]="form.username"
+          type="text"
+          required
+          placeholder="Username"
+          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+        />
+        <input
+          name="name-{{ i }}"
+          [(ngModel)]="form.name"
+          type="text"
+          required
+          placeholder="Name"
+          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+        />
+        <input
+          name="email-{{ i }}"
+          [(ngModel)]="form.email"
+          type="email"
+          required
+          placeholder="Email"
+          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+        />
+        <input
+          name="password-{{ i }}"
+          [(ngModel)]="form.password"
+          type="password"
+          required
+          placeholder="Password"
+          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+        />
+        <select
+          name="role-{{ i }}"
+          [(ngModel)]="form.role"
+          required
+          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none"
+        >
+          <option *ngFor="let role of roles" [value]="role">{{ role }}</option>
+        </select>
+      </div>
+
+      <button
+        *ngIf="forms.length > 1"
+        type="button"
+        class="h-10 rounded-md bg-[#D9D9D9] px-4 text-xs font-bold text-black"
+        (click)="removeForm(i)"
+      >
+        Remove
+      </button>
+    </div>
+
+    <p *ngIf="errorMessage" class="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+      {{ errorMessage }}
+    </p>
+
+    <div class="grid gap-3 md:ml-[120px] md:max-w-[760px]">
+      <button
+        type="button"
+        class="h-12 rounded-md bg-[#D9D9D9] text-xs font-bold text-black"
+        (click)="addMore()"
+      >
+        Add More
+      </button>
+      <button
+        type="submit"
+        [disabled]="isSubmitting"
+        class="h-14 rounded-md bg-[#D9D9D9] text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        {{ isSubmitting ? 'Submitting...' : 'Submit' }}
+      </button>
+    </div>
+  </form>
+</section>

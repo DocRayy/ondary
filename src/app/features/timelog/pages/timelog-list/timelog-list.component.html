@@ -1,0 +1,157 @@
+<section class="flex h-[calc(100dvh-116px)] min-h-[520px] flex-col overflow-hidden pr-8">
+  <div class="shrink-0 pb-5">
+    <h2 class="text-sm font-bold text-white">Create New Timelog</h2>
+
+    <form class="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_180px]" (ngSubmit)="createTimelog()">
+      <input
+        type="text"
+        placeholder="Description"
+        name="name"
+        [(ngModel)]="createForm.name"
+        class="h-14 rounded-md border border-tertiary-200 bg-tertiary-200 px-4 text-sm text-tertiary-800 outline-none transition placeholder:text-tertiary-600 focus:border-tertiary-400"
+      />
+      <input
+        type="text"
+        placeholder="Start note"
+        name="start_note"
+        [(ngModel)]="createForm.start_note"
+        class="h-14 rounded-md border border-tertiary-200 bg-tertiary-200 px-4 text-sm text-tertiary-800 outline-none transition placeholder:text-tertiary-600 focus:border-tertiary-400"
+      />
+      <button
+        type="submit"
+        [disabled]="isCreating"
+        class="h-14 rounded-md bg-tertiary-200 px-6 text-sm font-medium text-tertiary-900 transition hover:bg-tertiary-300"
+      >
+        {{ isCreating ? 'Creating...' : 'Submit' }}
+      </button>
+    </form>
+
+    <p *ngIf="errorMessage" class="mt-3 text-sm font-semibold text-red-600">{{ errorMessage }}</p>
+  </div>
+
+  <div class="flex min-h-0 flex-1 flex-col">
+    <h2 class="shrink-0 pb-4 text-sm font-bold text-white">Timelog List</h2>
+
+    <div *ngIf="isLoading" class="space-y-4">
+      <article
+        *ngFor="let s of [0, 1, 2]"
+        class="relative min-h-[200px] rounded-xl border border-tertiary-300 bg-tertiary-50 px-6 py-5"
+      >
+        <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
+          <!-- Avatar -->
+          <div class="skeleton h-11 w-11 rounded-full"></div>
+
+          <div class="min-w-0">
+            <div class="flex items-start gap-4">
+              <div class="min-w-[220px] max-w-[300px]">
+                <div class="skeleton mb-2 h-3.5 w-[70%] rounded"></div>
+                <div class="skeleton h-3 w-[45%] rounded"></div>
+              </div>
+              <div
+                class="mt-4 hidden flex-1 border-t border-dashed border-tertiary-700 md:block"
+              ></div>
+            </div>
+
+            <!-- Timeline grid -->
+            <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] gap-1">
+              <div class="skeleton h-2.5 w-9 rounded"></div>
+              <div class="skeleton row-span-3 w-1 rounded-full" style="height: 80px"></div>
+              <div class="skeleton h-2.5 w-14 rounded"></div>
+
+              <div></div>
+              <div class="skeleton my-2 h-[18px] w-10 rounded"></div>
+
+              <div class="skeleton h-2.5 w-9 rounded"></div>
+              <div class="skeleton h-2.5 w-14 rounded"></div>
+            </div>
+
+            <!-- Attachment slots -->
+            <div class="ml-[132px] mt-[-38px] flex gap-2">
+              <div class="skeleton h-8 w-8 rounded-md"></div>
+              <div class="skeleton h-8 w-8 rounded-md"></div>
+            </div>
+          </div>
+
+          <!-- Status badge -->
+          <div class="skeleton h-6 w-[72px] rounded-full"></div>
+        </div>
+      </article>
+    </div>
+
+    <div
+      *ngIf="!isLoading && !timelogs.length"
+      class="rounded-xl bg-tertiary-100 px-5 py-4 text-sm font-semibold text-tertiary-600"
+    >
+      No timelogs found.
+    </div>
+
+    <div
+      *ngIf="!isLoading && timelogs.length"
+      class="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+    >
+      <article
+        *ngFor="let item of timelogs"
+        class="relative min-h-[200px] rounded-xl border border-[#1A2026] px-6 py-5"
+      >
+        <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
+          <img
+            [src]="userPhoto()"
+            alt="User photo"
+            class="h-11 w-11 rounded-full border border-primary-200 object-cover"
+          />
+
+          <div class="min-w-0">
+            <div class="flex items-start gap-4">
+              <div class="min-w-[220px] max-w-[300px]">
+                <h3 class="truncate text-sm font-bold text-white">{{ item.title }}</h3>
+                <p class="mt-1 text-xs font-bold text-white">{{ item.user }}</p>
+              </div>
+              <div class="mt-4 hidden flex-1 border-t border-dashed border-white md:block"></div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] text-xs text-white">
+              <span>{{ item.startTime }}</span>
+              <span class="row-span-3 w-1 rounded-full bg-white"></span>
+              <span>Start task</span>
+
+              <span></span>
+              <span class="py-5 text-sm font-bold">{{ item.duration }}</span>
+
+              <span>{{ item.endTime }}</span>
+              <span>End task</span>
+            </div>
+
+            <div class="ml-[132px] mt-[-38px] flex gap-2">
+              <button
+                *ngFor="let file of item.files; let slot = index"
+                type="button"
+                class="grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-tertiary-200 text-tertiary-950 transition hover:bg-tertiary-300"
+                [attr.aria-label]="'Attachment ' + (slot + 1)"
+              >
+                <img
+                  *ngIf="getTimelogFilePhoto(file) as filePhoto; else attachmentPlaceholder"
+                  [src]="filePhoto"
+                  [alt]="file.note || 'Timelog attachment'"
+                  class="h-full w-full object-cover"
+                />
+                <ng-template #attachmentPlaceholder>
+                  <fc-icon icon="image-linear" class="text-base"></fc-icon>
+                </ng-template>
+              </button>
+            </div>
+          </div>
+
+          <span
+            class="h-fit rounded-full bg-tertiary-200 px-4 py-1.5 text-2xs font-bold text-tertiary-950"
+            [class.bg-green-100]="item.status === 'Completed'"
+            [class.text-green-800]="item.status === 'Completed'"
+            [class.bg-yellow-100]="item.status === 'Active'"
+            [class.text-yellow-800]="item.status === 'Active'"
+          >
+            {{ item.status }}
+          </span>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>

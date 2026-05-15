@@ -1,0 +1,9 @@
+.rightSection {
+  visibility: visible;
+}
+
+@media (max-width: 640px) {
+  .rightSection {
+    visibility: hidden;
+  }
+}

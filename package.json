@@ -1,10 +1,16 @@
 {
   "name": "ondary",
   "version": "0.0.0",
+  "description": "Ondary desktop app",
+  "author": "Ondary",
+  "main": "electron/main.js",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "electron": "npm run build -- --base-href ./ && electron .",
+    "electron:dev": "set ELECTRON_DEV=true&& electron .",
+    "package": "npm run build -- --base-href ./ && electron-builder",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
@@ -20,29 +26,63 @@
       }
     ]
   },
+  "build": {
+    "appId": "com.ondary.app",
+    "productName": "Ondary",
+    "files": [
+      "dist/ondary/browser/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    }
+  },
   "private": true,
   "dependencies": {
-    "@angular/common": "^20.3.0",
-    "@angular/compiler": "^20.3.0",
-    "@angular/core": "^20.3.0",
-    "@angular/forms": "^20.3.0",
-    "@angular/platform-browser": "^20.3.0",
-    "@angular/router": "^20.3.0",
+    "@angular/cdk": "^21.2.5",
+    "@angular/common": "^21.2.7",
+    "@angular/compiler": "^21.2.7",
+    "@angular/core": "^21.2.7",
+    "@angular/forms": "^21.2.7",
+    "@angular/platform-browser": "^21.2.7",
+    "@angular/router": "^21.2.7",
+    "@ng-icons/core": "^33.2.0",
+    "@ng-icons/lucide": "^33.2.0",
+    "@primeuix/themes": "^1.2.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.20",
+    "gsap": "^3.15.0",
+    "primeicons": "^7.0.0",
+    "primeng": "^21.1.5",
     "rxjs": "~7.8.0",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss-primeui": "^0.6.1",
     "tslib": "^2.3.0",
-    "zone.js": "~0.15.0"
+    "zone.js": "~0.16.0"
   },
   "devDependencies": {
-    "@angular/build": "^20.3.4",
-    "@angular/cli": "^20.3.4",
-    "@angular/compiler-cli": "^20.3.0",
+    "@angular/build": "^21.2.6",
+    "@angular/cli": "^21.2.6",
+    "@angular/compiler-cli": "^21.2.7",
+    "@tailwindcss/postcss": "^4.1.14",
     "@types/jasmine": "~5.1.0",
+    "autoprefixer": "^10.4.22",
+    "baseline-browser-mapping": "^2.10.13",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.8.1",
     "jasmine-core": "~5.9.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.9.2"
   }
 }

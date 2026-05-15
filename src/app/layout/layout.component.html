@@ -1,0 +1,98 @@
+<div class="h-dvh overflow-hidden bg-[#2F4156] text-tertiary-50">
+  <div class="flex h-dvh">
+    <app-sidebar></app-sidebar>
+    <div class="flex min-h-dvh flex-1 flex-col">
+      <app-header></app-header>
+      <main class="flex-1 overflow-y-auto bg-[#2F4156] pl-8 pr-0 py-6">
+        <router-outlet></router-outlet>
+      </main>
+    </div>
+  </div>
+
+  <div
+    *ngIf="activeTimelogService.activeTimelog() as activeTimelog"
+    class="fixed bottom-8 left-1/2 z-70 flex -translate-x-1/2 items-center gap-4 rounded-full bg-[#94A3B8] px-4 py-2 text-black shadow-sm"
+  >
+    <span class="text-base font-bold text-black">{{ activeTimelog.elapsed }}</span>
+    <button
+      type="button"
+      class="rounded-full bg-white px-5 py-2 text-2xs font-bold text-tertiary-950 disabled:cursor-not-allowed disabled:opacity-70"
+      [disabled]="activeTimelogService.isEnding()"
+      (click)="endActiveTimelog()"
+    >
+      {{ activeTimelogService.isEnding() ? 'Ending...' : 'End Timelog' }}
+    </button>
+  </div>
+
+  <div
+    *ngIf="activeTimelogService.isEndDialogOpen()"
+    appGsapModal
+    class="fixed inset-0 z-80 flex items-center justify-center bg-black/30 px-4"
+    role="presentation"
+    (click)="closeEndDialog()"
+  >
+    <section
+      class="w-[min(460px,calc(100vw-32px))] rounded-xl bg-white p-5 text-black shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="flex items-center justify-between gap-4">
+        <h3 class="text-base font-extrabold text-black">End Timelog</h3>
+        <button
+          type="button"
+          class="grid h-7 w-7 place-items-center rounded-full bg-[#d9d9d9] text-xs text-black"
+          aria-label="Close end timelog dialog"
+          (click)="closeEndDialog()"
+        >
+          X
+        </button>
+      </header>
+
+      <label class="mt-4 block text-xs font-bold text-black">
+        End note
+        <textarea
+          [(ngModel)]="endNote"
+          class="mt-2 h-24 w-full resize-none rounded-md border-0 bg-[#d9d9d9] px-3 py-2 text-xs text-black outline-none"
+          placeholder="End note"
+        ></textarea>
+      </label>
+
+      <label class="mt-4 block text-xs font-bold text-black">
+        Attach image
+        <input
+          type="file"
+          [attr.accept]="imageAccept"
+          class="mt-2 block w-full rounded-md bg-[#d9d9d9] px-3 py-2 text-xs text-black"
+          (change)="onEndPhotoChange($event)"
+        />
+      </label>
+      <p *ngIf="endFileError" class="mt-2 text-xs font-bold text-red-700">{{ endFileError }}</p>
+      <div
+        *ngIf="endPhotoPreview"
+        class="mt-3 h-28 w-28 overflow-hidden rounded-md bg-[#d9d9d9]"
+      >
+        <img [src]="endPhotoPreview" alt="End timelog preview" class="h-full w-full object-cover" />
+      </div>
+
+      <div class="mt-5 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          class="h-10 rounded-md bg-[#d9d9d9] px-4 text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-70"
+          [disabled]="activeTimelogService.isEnding()"
+          (click)="submitEndTimelog('pause')"
+        >
+          {{ activeTimelogService.isEnding() ? 'Submitting...' : 'End without finish' }}
+        </button>
+        <button
+          type="button"
+          class="h-10 rounded-md bg-tertiary-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          [disabled]="activeTimelogService.isEnding()"
+          (click)="submitEndTimelog('finish')"
+        >
+          {{ activeTimelogService.isEnding() ? 'Submitting...' : 'Finish' }}
+        </button>
+      </div>
+    </section>
+  </div>
+</div>

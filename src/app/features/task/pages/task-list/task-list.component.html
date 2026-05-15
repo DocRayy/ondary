@@ -1,0 +1,424 @@
+<section class="space-y-6 pr-8">
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="flex rounded-full bg-[#1E293B] p-1 text-sm font-semibold text-tertiary-400">
+      <button
+        *ngFor="let tab of viewTabs"
+        type="button"
+        class="rounded-full px-6 py-2 transition"
+        [class.bg-tertiary-300]="tab.value === activeView"
+        [class.text-black]="tab.value === activeView"
+        (click)="setActiveView(tab.value)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div class="ml-auto flex flex-wrap items-center gap-3">
+      <select
+        *ngIf="isManager"
+        [(ngModel)]="selectedUserId"
+        (ngModelChange)="onSelectedUserChange($event)"
+        class="h-10 rounded-full border border-tertiary-200 bg-tertiary-100 px-4 text-sm font-semibold text-tertiary-800 outline-none"
+      >
+        <option value="">All users</option>
+        <option *ngFor="let user of users" [value]="user.id">
+          {{ user.name || user.username || user.email }}
+        </option>
+      </select>
+      <button
+        *ngIf="activeView === 'board' && !isMember"
+        type="button"
+        class="flex items-center gap-2 rounded-full border border-tertiary-200 px-4 py-2 text-sm font-semibold shadow-sm transition hover:border-tertiary-300 disabled:cursor-not-allowed disabled:opacity-70"
+        [class.bg-tertiary-300]="isMyTaskMode"
+        [class.text-tertiary-900]="isMyTaskMode"
+        [class.bg-tertiary-100]="!isMyTaskMode"
+        [class.text-tertiary-700]="!isMyTaskMode"
+        [disabled]="isLoadingTasks"
+        (click)="toggleMyTaskMode()"
+      >
+        {{ isMyTaskMode ? 'All Task' : 'My Task' }}
+      </button>
+    </div>
+  </div>
+
+  <div
+    *ngIf="activeView === 'board' && isLoadingTasks"
+    class="grid gap-6 lg:grid-cols-2 xl:grid-cols-4"
+  >
+    <div
+      *ngFor="let col of [1, 2, 3, 4]"
+      class="flex flex-col rounded-3xl bg-[#1E293B] p-4 min-h-[520px]"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="h-4 w-24 rounded-full bg-tertiary-50 animate-pulse"></div>
+          <div class="h-5 w-6 rounded-full bg-tertiary-50 animate-pulse"></div>
+        </div>
+        <div class="h-8 w-8 rounded-full bg-tertiary-50 animate-pulse"></div>
+      </div>
+      <div class="mt-4 space-y-4">
+        <div *ngFor="let card of [1, 2, 3]" class="rounded-2xl bg-tertiary-200 px-4 py-4 space-y-3">
+          <div class="flex items-center gap-2">
+            <div class="h-4 w-32 rounded-full bg-tertiary-300 animate-pulse"></div>
+            <div class="h-4 w-12 rounded-full bg-tertiary-300 animate-pulse"></div>
+          </div>
+          <div class="flex gap-2">
+            <div class="h-5 w-16 rounded-full bg-tertiary-300 animate-pulse"></div>
+            <div class="h-5 w-14 rounded-full bg-tertiary-300 animate-pulse"></div>
+            <div class="ml-auto h-5 w-10 rounded-full bg-tertiary-300 animate-pulse"></div>
+          </div>
+          <div class="flex gap-2">
+            <div class="h-6 w-6 rounded-full bg-tertiary-300 animate-pulse"></div>
+            <div class="h-6 w-6 rounded-full bg-tertiary-300 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div
+    *ngIf="activeView === 'board' && taskErrorMessage"
+    class="rounded-2xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-700"
+  >
+    {{ taskErrorMessage }}
+  </div>
+
+  <div
+    *ngIf="activeView === 'board' && !isLoadingTasks"
+    class="grid gap-6 lg:grid-cols-2 xl:grid-cols-4"
+  >
+    <div
+      *ngFor="let column of columns; let i = index; trackBy: trackColumnByStatus"
+      class="flex min-h-[520px] flex-col rounded-3xl bg-[#1E293B] p-4"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <p class="text-base font-semibold text-tertiary-50">{{ column.title }}</p>
+          <span class="rounded-full bg-tertiary-50 px-2 py-0.5 text-xs font-semibold text-black">
+            {{ column.count }}
+          </span>
+        </div>
+        <button
+          *ngIf="isManager"
+          type="button"
+          class="flex w-8 h-8 rounded-full bg-white items-center justify-center transition hover:-translate-y-0.5"
+          (click)="openTaskDialog(column)"
+        >
+          <fc-icon icon="add-linear" class="text-xl text-black"></fc-icon>
+        </button>
+      </div>
+
+      <div
+        class="mt-4 flex-1 space-y-4"
+        cdkDropList
+        [id]="getBoardDropListId(i)"
+        [cdkDropListData]="column.cards"
+        [cdkDropListConnectedTo]="boardConnectedDropListIds[i]"
+        (cdkDropListDropped)="onBoardCardDrop($event)"
+      >
+        <ng-container *ngIf="column.cards.length; else emptyState">
+          <article
+            *ngFor="let card of column.cards; trackBy: trackCardById"
+            class="board-task-card rounded-2xl bg-[#D9D9D9] px-4 py-4 shadow-sm transition-shadow hover:shadow-md"
+            role="button"
+            tabindex="0"
+            cdkDrag
+            [cdkDragData]="card"
+            [cdkDragDisabled]="!canEditTask(card.task)"
+            [class.cursor-pointer]="!canEditTask(card.task)"
+            [class.cursor-grab]="canEditTask(card.task)"
+            [class.active\:cursor-grabbing]="canEditTask(card.task)"
+            (cdkDragStarted)="onBoardCardDragStarted()"
+            (cdkDragEnded)="onBoardCardDragEnded()"
+            (click)="onBoardCardClick($event, card)"
+            (keydown.enter)="openTaskDetailDialog(card)"
+            (keydown.space)="openTaskDetailDialog(card); $event.preventDefault()"
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <h4 class="min-w-0 text-sm font-semibold text-black">
+                {{ card.title }}
+              </h4>
+              <span
+                *ngFor="let label of card.labels; trackBy: trackLabelById"
+                class="shrink-0 rounded-full px-2 py-0.5 text-2xs font-bold ring-1"
+                [ngClass]="getTaskLabelBadgeClass(label.color)"
+              >
+                {{ label.name }}
+              </span>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-white">
+              <span class="rounded-full bg-[#1E293B] px-2 py-0.5 font-semibold">
+                {{ card.date }}
+              </span>
+              <span class="rounded-full bg-[#1E293B] px-2 py-0.5 font-semibold">
+                {{ card.subtask }}
+              </span>
+              <span class="ml-auto flex items-center gap-1 font-semibold text-black">
+                <span class="h-2 w-2 rounded-full bg-[#1E293B]"></span>
+                {{ card.progress }}%
+              </span>
+            </div>
+            <div class="mt-4 flex items-center gap-2">
+              <span
+                *ngFor="let member of card.members; trackBy: trackMemberByInitial"
+                class="flex h-6 w-6 items-center justify-center rounded-full bg-[#1E293B] text-2xs font-semibold text-white"
+              >
+                {{ member }}
+              </span>
+            </div>
+          </article>
+        </ng-container>
+      </div>
+
+      <ng-template #emptyState>
+        <div
+          class="flex flex-1 items-center justify-center text-sm font-semibold text-tertiary-500"
+        >
+          {{ column.emptyText }}
+        </div>
+      </ng-template>
+    </div>
+  </div>
+
+  <div *ngIf="activeView === 'timelog'" class="rounded-3xl py-6">
+    <div *ngIf="isLoadingTimelogs" class="rounded-3xl bg-tertiary-50 py-6 px-6 space-y-6">
+      <div class="flex items-center gap-6">
+        <div class="w-[260px] shrink-0 h-4 rounded-full bg-tertiary-200 animate-pulse"></div>
+        <div class="flex-1 flex justify-between">
+          <div
+            *ngFor="let t of [1, 2, 3, 4, 5, 6]"
+            class="h-4 w-10 rounded-full bg-tertiary-200 animate-pulse"
+          ></div>
+        </div>
+      </div>
+      <div *ngFor="let row of [1, 2, 3, 4]" class="flex gap-6 items-center">
+        <div class="w-[260px] shrink-0 h-12 rounded-full bg-tertiary-200 animate-pulse"></div>
+        <div class="flex-1 relative h-12">
+          <div
+            class="absolute h-8 rounded-full bg-tertiary-300 animate-pulse"
+            [style.left.%]="(row - 1) * 10"
+            [style.width.%]="25 + row * 5"
+            style="top: 8px"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      *ngIf="timelogErrorMessage"
+      class="mx-6 mb-4 rounded-2xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-700"
+    >
+      {{ timelogErrorMessage }}
+    </div>
+
+    <div class="flex items-center justify-between px-6">
+      <div class="w-[260px] shrink-0"></div>
+      <div class="relative h-6 flex-1">
+        <span
+          *ngFor="let time of timeSlots; let i = index"
+          class="absolute top-0 -translate-x-1/2 text-sm font-semibold text-white"
+          [style.left.%]="(i / timelineSegments) * 100"
+        >
+          {{ time }}
+        </span>
+      </div>
+    </div>
+
+    <div *ngIf="timelogUsers.length && !isLoadingTimelogs" class="mt-4 space-y-6 px-6">
+      <div *ngFor="let user of timelogUsers; trackBy: trackTimelogUserById" class="flex gap-6">
+        <div
+          class="flex h-12 w-[260px] shrink-0 items-center gap-3 rounded-full bg-[#1E293B] px-3 py-2 text-sm font-semibold text-white"
+        >
+          <img
+            [src]="user.photoUrl"
+            [alt]="user.name"
+            class="h-7 w-7 shrink-0 rounded-full object-cover"
+          />
+          <span class="min-w-0 truncate">{{ user.name }}</span>
+        </div>
+
+        <div class="relative min-w-0 flex-1" [style.height.px]="getTimelogRowHeight(user)">
+          <div
+            class="grid h-full"
+            [style.grid-template-columns]="'repeat(' + timelineSegments + ', minmax(0, 1fr))'"
+          >
+            <div
+              *ngFor="let _ of timeSlots.slice(0, -1)"
+              class="border-l border-dashed border-tertiary-900"
+            ></div>
+          </div>
+          <div
+            class="pointer-events-none absolute right-0 top-0 h-full border-r border-dashed border-tertiary-900"
+          ></div>
+
+          <div
+            *ngFor="let log of user.logs; trackBy: trackTimelogById"
+            class="absolute h-8 overflow-hidden rounded-full bg-[#1E293B] px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+            [style.left.%]="log.left"
+            [style.width.%]="log.width"
+            [style.top.px]="log.lane * 42 + 8"
+            [title]="log.label"
+          >
+            <span class="block truncate">{{ log.label }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      *ngIf="!isLoadingTimelogs && !timelogUsers.length && !timelogErrorMessage"
+      class="mx-6 mt-4 rounded-2xl bg-tertiary-100 px-5 py-4 text-sm font-semibold text-tertiary-600"
+    >
+      No timelogs found.
+    </div>
+  </div>
+
+  <div *ngIf="activeView === 'calendar'" class="grid gap-6 lg:grid-cols-[2fr_1fr]">
+    <div class="rounded-3xl bg-[#1E293B] p-6">
+      <div class="flex items-center justify-between">
+        <button
+          type="button"
+          class="grid h-8 w-8 place-items-center rounded-full bg-white text-black"
+        >
+          <svg
+            class="h-4 w-4"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 5l-5 5 5 5"></path>
+          </svg>
+        </button>
+        <p class="text-lg font-semibold text-white">{{ currentMonthLabel }}</p>
+        <button
+          type="button"
+          class="grid h-8 w-8 place-items-center rounded-full bg-white text-black"
+        >
+          <svg
+            class="h-4 w-4"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M8 5l5 5-5 5"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div
+        class="mt-4 grid grid-cols-7 gap-2 rounded-2xl bg-tertiary-200 px-4 py-3 text-center text-sm font-semibold text-black"
+      >
+        <span *ngFor="let day of calendarWeekdays">{{ day }}</span>
+      </div>
+
+      <div class="mt-3 grid grid-cols-7 gap-2">
+        <ng-container *ngFor="let week of calendarWeeks">
+          <div
+            *ngFor="let day of week"
+            class="rounded-xl border border-tertiary-200 px-3 py-4 text-sm font-semibold text-white"
+            [class.text-black]="!day.inMonth"
+            [class.bg-primary-300]="day.isToday"
+            [class.border-tertiary-400]="day.isToday"
+          >
+            <div class="flex items-center justify-between">
+              <span>{{ day.day }}</span>
+            </div>
+            <div *ngIf="day.inMonth" class="mt-2 space-y-1">
+              <button
+                *ngFor="let task of getVisibleCalendarTasks(day); trackBy: trackCalendarTaskById"
+                type="button"
+                class="block w-full truncate rounded-md bg-tertiary-300 px-2 py-1 text-left text-2xs font-bold text-tertiary-900"
+                (click)="openCalendarTask(task)"
+              >
+                {{ task.title || task.name || 'Task #' + task.id }}
+              </button>
+              <span
+                *ngIf="getHiddenCalendarTaskCount(day) > 0"
+                class="block rounded-md bg-tertiary-200 px-2 py-1 text-2xs font-bold text-tertiary-700"
+              >
+                +{{ getHiddenCalendarTaskCount(day) }} more
+              </span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
+    <div class="rounded-3xl bg-[#1E293B] p-6">
+      <div class="flex items-center justify-between">
+        <p class="text-base font-semibold text-white">Upcoming</p>
+      </div>
+      <div class="mt-4 space-y-4">
+        <article
+          *ngFor="let task of upcomingTasks; trackBy: trackUpcomingTodoById"
+          class="cursor-pointer rounded-2xl bg-tertiary-200 px-4 py-4 text-sm font-semibold text-black transition hover:bg-tertiary-300"
+          (click)="openCalendarTask(task.task)"
+        >
+          <p>{{ task.title }}</p>
+          <p class="mt-3 text-xs font-semibold text-tertiary-600">{{ task.date }}</p>
+        </article>
+        <div
+          *ngIf="!upcomingTasks.length"
+          class="rounded-2xl bg-tertiary-200 px-4 py-4 text-sm font-semibold text-black"
+        >
+          No upcoming task todos.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="activeView === 'recap'" class="rounded-3xl px-5 py-6">
+    <div class="overflow-x-auto">
+      <div class="min-w-[900px]">
+        <div
+          class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] border-b border-white px-0 pb-4 text-xs font-medium text-white"
+        >
+          <span>Assigne &gt; Todo</span>
+          <span>Status</span>
+          <span>Created</span>
+          <span>Completed</span>
+          <span>Project</span>
+          <span>Time Spend</span>
+        </div>
+
+        <div class="pt-5">
+          <div
+            *ngFor="let row of recapRows; trackBy: trackRecapRowById"
+            class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] items-center py-2 text-sm text-white"
+          >
+            <div class="flex min-w-0 items-center gap-2">
+              <img
+                [src]="row.photoUrl"
+                [alt]="row.assignee"
+                class="h-6 w-6 shrink-0 rounded-full object-cover"
+              />
+              <span class="truncate font-semibold">{{ row.assignee }} &gt; {{ row.todo }}</span>
+            </div>
+            <span class="truncate">{{ row.status }}</span>
+            <span>{{ row.created }}</span>
+            <span>{{ row.completed }}</span>
+            <span class="truncate">{{ row.project }}</span>
+            <span>{{ row.timeSpend }}</span>
+          </div>
+          <div *ngIf="!recapRows.length" class="py-4 text-sm font-semibold text-tertiary-600">
+            No timelogs today.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <app-task-dialog
+    [visible]="isTaskDialogOpen"
+    [defaultStatus]="selectedTaskDialogStatus"
+    [orderIndex]="selectedTaskDialogOrderIndex"
+    [task]="selectedTaskDialogTask"
+    [isReadonly]="selectedTaskDialogTask ? !canEditTask(selectedTaskDialogTask) : false"
+    (visibleChange)="onTaskDialogVisibleChange($event)"
+    (taskCreated)="onTaskCreated($event)"
+    (taskUpdated)="onTaskUpdated($event)"
+    (taskDeleted)="onTaskDeleted($event)"
+  />
+</section>

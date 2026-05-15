@@ -1,0 +1,134 @@
+<section class="space-y-8 pr-8 text-black">
+  <div class="flex items-center gap-4">
+    <h1 class="text-base font-extrabold text-white">My Reports</h1>
+
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        type="button"
+        class="grid h-11 w-11 place-items-center rounded-xl bg-tertiary-100 text-lg font-bold transition hover:bg-tertiary-200"
+        (click)="previousMonth()"
+        aria-label="Previous month"
+      >
+        ‹
+      </button>
+      <div
+        class="grid h-11 min-w-44 place-items-center rounded-xl bg-tertiary-100 px-6 text-sm font-bold"
+      >
+        {{ monthLabel() }}
+      </div>
+      <button
+        type="button"
+        class="grid h-11 w-11 place-items-center rounded-xl bg-tertiary-100 text-lg font-bold transition hover:bg-tertiary-200"
+        (click)="nextMonth()"
+        aria-label="Next month"
+      >
+        ›
+      </button>
+    </div>
+  </div>
+
+  <div
+    *ngIf="isLoading()"
+    class="rounded-xl bg-tertiary-100 px-5 py-4 text-sm font-bold text-tertiary-700"
+  >
+    Loading reports...
+  </div>
+
+  <div
+    *ngIf="!isLoading() && errorMessage()"
+    class="rounded-xl bg-red-50 px-5 py-4 text-sm font-bold text-red-700"
+  >
+    {{ errorMessage() }}
+  </div>
+
+  <div class="grid gap-3 lg:grid-cols-[1.35fr_0.62fr_1fr]">
+    <article
+      class="flex min-h-[100px] items-center gap-5 rounded-xl border border-tertiary-200 bg-tertiary-50 px-6 py-4"
+    >
+      <div class="grid h-[74px] w-[74px] place-items-center rounded-md bg-tertiary-200">
+        <fc-icon icon="clock-linear" class="text-5xl text-black"></fc-icon>
+      </div>
+      <div>
+        <p class="text-sm font-extrabold">Total Time Spend</p>
+        <p class="mt-5 text-2xl font-extrabold">{{ formatMinutes(totalMinutes()) }}</p>
+        <p class="mt-1 text-xs italic">Total of {{ totalProjects() }} Projects</p>
+      </div>
+    </article>
+
+    <div class="grid gap-2">
+      <div
+        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
+      >
+        <span class="text-xl font-extrabold">{{ totalTodos() }}</span>
+        <span class="text-sm font-extrabold">Todos</span>
+      </div>
+      <div
+        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
+      >
+        <span class="text-xl font-extrabold">{{ totalProjects() }}</span>
+        <span class="text-sm font-extrabold">Projects</span>
+      </div>
+      <div
+        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
+      >
+        <span class="text-xl font-extrabold">{{ totalCompleted() }}</span>
+        <span class="text-sm font-extrabold">Completed</span>
+      </div>
+    </div>
+
+    <div class="grid gap-2">
+      <article
+        class="flex min-h-16 items-center justify-center gap-5 rounded-xl border border-tertiary-200 bg-tertiary-50 px-6 py-3"
+      >
+        <fc-icon icon="fire-linear" class="text-5xl text-black"></fc-icon>
+        <p class="text-2xl font-extrabold leading-tight">Excellent<br />Work</p>
+      </article>
+      <button
+        type="button"
+        class="h-[30px] rounded-xl bg-tertiary-200 text-xs font-extrabold transition hover:bg-tertiary-300"
+        (click)="generatePdf()"
+        [disabled]="isGeneratingPdf()"
+      >
+        {{ isGeneratingPdf() ? 'Generating...' : 'Generate PDF' }}
+      </button>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto text-white">
+    <div class="min-w-[900px]">
+      <div
+        class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] border-b border-black px-0 pb-3 text-xs font-medium"
+      >
+        <span>Assigne &gt; Todo</span>
+        <span>Status</span>
+        <span>Created</span>
+        <span>Completed</span>
+        <span>Project</span>
+        <span>Time Spend</span>
+      </div>
+
+      <div class="pt-5">
+        <div
+          *ngFor="let row of reportRows(); trackBy: trackRowById"
+          class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] items-center py-2 text-sm"
+        >
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="truncate font-bold">{{ row.assignee }} &gt; {{ row.todo }}</span>
+          </div>
+          <span>{{ row.status }}</span>
+          <span>{{ row.created }}</span>
+          <span>{{ row.completed }}</span>
+          <span class="truncate">{{ row.project }}</span>
+          <span>{{ formatMinutes(row.timeSpendMinutes) }}</span>
+        </div>
+
+        <div
+          *ngIf="!reportRows().length && !isLoading()"
+          class="py-5 text-sm font-bold text-tertiary-600"
+        >
+          No report data for this month.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
