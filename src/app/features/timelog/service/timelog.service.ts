@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '@app/shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 import {
   ApiCollectionResponse,
@@ -37,16 +38,26 @@ export class TimelogService {
   }
 
   updateTimelog(timelogId: number | string, payload: UpdateTimelogRequest | FormData) {
+    const id = normalizeApiId(timelogId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('timelog id'));
+    }
+
     return this.http
-      .patch<ApiItemResponse<TimelogRecord>>(`${this.apiUrl}/timelogs/${timelogId}`, payload, {
+      .patch<ApiItemResponse<TimelogRecord>>(`${this.apiUrl}/timelogs/${id}`, payload, {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
   uploadTimelogFile(timelogId: number | string, photo: File, note = '') {
+    const id = normalizeApiId(timelogId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('timelog id'));
+    }
+
     const formData = new FormData();
-    formData.append('timelog_id', String(timelogId));
+    formData.append('timelog_id', String(id));
     formData.append('photo', photo);
 
     if (note.trim()) {

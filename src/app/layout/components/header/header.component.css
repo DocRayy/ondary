@@ -1,0 +1,8 @@
+.overflow-y-auto {
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.overflow-y-auto::-webkit-scrollbar {
+    display: none;
+}

@@ -36,7 +36,7 @@ export class LoginComponent {
 
   submitLogin() {
     if (!this.loginForm.username || !this.loginForm.password || this.loading) {
-      this.errorMessage = 'Username dan password wajib diisi.';
+      this.errorMessage = 'Username and password are required.';
       return;
     }
 
@@ -50,7 +50,7 @@ export class LoginComponent {
       },
       error: () => {
         this.loading = false;
-        this.errorMessage = 'Username atau password tidak sesuai.';
+        this.errorMessage = 'Username or password is incorrect.';
       },
     });
   }

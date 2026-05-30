@@ -73,7 +73,8 @@ export interface TaskRecord extends Partial<CreateTaskRequest>, Partial<UpdateTa
   id?: number | string;
   task_title?: string;
   name?: string;
-  user?: UserOption;
+  user?: UserOption | UserOption[] | null;
+  users?: UserOption[];
   project?: ProjectOption;
   assignee_users?: UserOption[];
   labels?: TaskLabelOption[];
@@ -99,6 +100,67 @@ export interface UserOption {
   email: string;
   name?: string;
 }
+
+export const getTaskUsers = (task: TaskRecord | null | undefined): UserOption[] => {
+  if (!task) {
+    return [];
+  }
+
+  if (Array.isArray(task.user)) {
+    return task.user.filter(Boolean);
+  }
+
+  if (Array.isArray(task.users)) {
+    return task.users.filter(Boolean);
+  }
+
+  if (Array.isArray(task.assignee_users)) {
+    return task.assignee_users.filter(Boolean);
+  }
+
+  if (task.user && typeof task.user === 'object') {
+    return [task.user];
+  }
+
+  return [];
+};
+
+export const getTaskUserIds = (task: TaskRecord | null | undefined): number[] => {
+  if (!task) {
+    return [];
+  }
+
+  const assigneeIds = parseTaskIdList(task.assignee_user_ids);
+  if (assigneeIds.length) {
+    return assigneeIds;
+  }
+
+  return getTaskUsers(task)
+    .map((user) => Number(user.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+};
+
+export const parseTaskIdList = (
+  value: Array<number | string> | string | undefined,
+): number[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0);
+  }
+
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parseTaskIdList(parsed) : [];
+  } catch {
+    return value
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item > 0);
+  }
+};
 
 export interface TaskLabelOption {
   id: number;

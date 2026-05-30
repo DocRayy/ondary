@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { RolePermissionService } from '../../../core/auth/role-permission.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { ImageCropperComponent } from '../../../shared/components/image-cropper/image-cropper.component';
 import { ToastService } from '../../../shared/components/toast/toast.service';
 import { GsapModalDirective } from '../../../shared/directives/gsap-modal.directive';
 import { getApiMediaUrl, imageAcceptAttribute, isAllowedImageFile } from '../../../shared/utils/media';
@@ -24,7 +25,15 @@ type EditMemberForm = {
 @Component({
   selector: 'app-team-members',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ConfirmationModalComponent, FcIconComponent, GsapModalDirective],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    ConfirmationModalComponent,
+    FcIconComponent,
+    GsapModalDirective,
+    ImageCropperComponent,
+  ],
   templateUrl: './team-members.component.html',
 })
 export class TeamMembersComponent implements OnInit {
@@ -45,6 +54,7 @@ export class TeamMembersComponent implements OnInit {
   readonly imageAccept = imageAcceptAttribute();
   readonly roles = ['member', 'manager', 'admin'];
   editForm: EditMemberForm = this.createEditForm();
+  editCropFile: File | null = null;
 
   readonly filteredUsers = computed(() => {
     const keyword = this.searchTerm().trim().toLowerCase();
@@ -84,6 +94,7 @@ export class TeamMembersComponent implements OnInit {
       return;
     }
 
+    this.revokePreview(this.editForm.photoPreview);
     this.editingUser.set(user);
     this.editForm = {
       username: user.username || '',
@@ -94,6 +105,7 @@ export class TeamMembersComponent implements OnInit {
       photoFile: null,
       photoPreview: this.getUserPhoto(user) || '',
     };
+    this.editCropFile = null;
   }
 
   closeEditUser(): void {
@@ -102,6 +114,8 @@ export class TeamMembersComponent implements OnInit {
     }
 
     this.editingUser.set(null);
+    this.editCropFile = null;
+    this.revokePreview(this.editForm.photoPreview);
     this.editForm = this.createEditForm();
   }
 
@@ -112,18 +126,32 @@ export class TeamMembersComponent implements OnInit {
     if (!file) {
       this.editForm.photoFile = null;
       this.editForm.photoPreview = this.editingUser() ? this.getUserPhoto(this.editingUser()!) || '' : '';
+      this.editCropFile = null;
       return;
     }
 
     if (!isAllowedImageFile(file)) {
       input.value = '';
       this.editForm.photoFile = null;
+      this.editCropFile = null;
       this.errorMessage.set('Upload photo hanya boleh jpg, jpeg, png, webp, atau gif.');
       return;
     }
 
+    input.value = '';
+    this.editCropFile = file;
+    this.errorMessage.set('');
+  }
+
+  cancelEditPhotoCrop(): void {
+    this.editCropFile = null;
+  }
+
+  applyEditPhotoCrop(file: File): void {
+    this.revokePreview(this.editForm.photoPreview);
     this.editForm.photoFile = file;
     this.editForm.photoPreview = URL.createObjectURL(file);
+    this.editCropFile = null;
     this.errorMessage.set('');
   }
 
@@ -200,6 +228,12 @@ export class TeamMembersComponent implements OnInit {
       photoFile: null,
       photoPreview: '',
     };
+  }
+
+  private revokePreview(preview: string): void {
+    if (preview.startsWith('blob:')) {
+      URL.revokeObjectURL(preview);
+    }
   }
 
   deleteUser(user: TeamMember): void {

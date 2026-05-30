@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, computed, inject } from '@angular/core';
 import {
   CdkDragDrop,
   DragDropModule,
@@ -17,6 +17,9 @@ import {
   TaskStatus,
   TaskTodoRecord,
   UpdateTaskRequest,
+  getTaskUserIds,
+  getTaskUsers,
+  parseTaskIdList,
 } from '../../schema/task.schema';
 import { TaskService } from '../../service/task.service';
 import { TimelogRecord } from '../../../timelog/schema/timelog.schema';
@@ -26,6 +29,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../../core/auth/role-permission.service';
 import { UserOption } from '../../schema/task.schema';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
+import { getApiMediaUrl } from '@app/shared/utils/media';
 
 type ViewType = 'board' | 'timelog' | 'calendar' | 'recap';
 
@@ -57,7 +61,7 @@ interface CalendarDay {
 
 interface RecapRow {
   assignee: string;
-  photoUrl: string;
+  photo: string;
   todo: string;
   status: string;
   created: number;
@@ -86,7 +90,7 @@ interface TimelogTimelineLog {
 interface TimelogTimelineUser {
   id: number | string;
   name: string;
-  photoUrl: string;
+  photo: string;
   logs: TimelogTimelineLog[];
   lanes: number;
 }
@@ -109,6 +113,17 @@ export class TaskListComponent implements OnInit {
   private readonly timelineEndHour = 24;
   private suppressBoardCardClick = false;
 
+  readonly displayName = computed(() => {
+    const user = this.authService.getUser();
+    return user?.username || user?.name || 'User';
+  });
+
+  readonly userPhoto = computed(() => {
+    const user = this.authService.getUser();
+    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
+    return getApiMediaUrl(photo) || '';
+  });
+  
   readonly viewTabs = [
     { label: 'Board', value: 'board' },
     { label: 'Timelog', value: 'timelog' },
@@ -282,7 +297,7 @@ export class TaskListComponent implements OnInit {
   }
 
   toggleMyTaskMode(): void {
-    if (this.isMember) {
+    if (this.isManager) {
       return;
     }
 
@@ -293,6 +308,7 @@ export class TaskListComponent implements OnInit {
     }
 
     this.isMyTaskMode = !this.isMyTaskMode;
+    this.selectedUserId = this.isMyTaskMode ? String(currentUserId ?? '') : '';
     this.loadTasks();
   }
 
@@ -449,6 +465,26 @@ export class TaskListComponent implements OnInit {
 
   trackTimelogById(index: number, log: TimelogTimelineLog): number | string {
     return log.id ?? index;
+  }
+
+  trackTimeSlotByValue(_: number, time: string): string {
+    return time;
+  }
+
+  getTimelinePosition(index: number): number {
+    return (index / this.timelineSegments) * 100;
+  }
+
+  getTimeSlotTransform(index: number): string {
+    if (index === 0) {
+      return 'translateX(0)';
+    }
+
+    if (index === this.timeSlots.length - 1) {
+      return 'translateX(-100%)';
+    }
+
+    return 'translateX(-50%)';
   }
 
   trackCalendarTaskById(index: number, task: TaskRecord): number | string {
@@ -696,19 +732,19 @@ export class TaskListComponent implements OnInit {
   }
 
   private getTaskMemberInitials(task: TaskRecord): string[] {
-    const assigneeUsers = (task.assignee_users || []).filter(Boolean);
-    if (assigneeUsers.length) {
-      return assigneeUsers.map((user) =>
+    const taskUsers = getTaskUsers(task);
+    if (taskUsers.length) {
+      return taskUsers.map((user) =>
         this.getUserInitial(user?.name || user?.username || user?.email || user?.id),
       );
     }
 
-    const assigneeIds = this.parseIdList(task.assignee_user_ids);
+    const assigneeIds = getTaskUserIds(task);
     if (assigneeIds.length) {
       return assigneeIds.map((id) => this.getUserInitial(id));
     }
 
-    return [this.getUserInitial(task.user?.name || task.user?.username || task.user_id)];
+    return [this.getUserInitial(task.user_id)];
   }
 
   private getUserInitial(value: number | string | undefined): string {
@@ -740,23 +776,7 @@ export class TaskListComponent implements OnInit {
   }
 
   private parseIdList(value: Array<number | string> | string | undefined): number[] {
-    if (Array.isArray(value)) {
-      return value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0);
-    }
-
-    if (!value) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? this.parseIdList(parsed) : [];
-    } catch {
-      return value
-        .split(',')
-        .map((item) => Number(item.trim()))
-        .filter((item) => Number.isInteger(item) && item > 0);
-    }
+    return parseTaskIdList(value);
   }
 
   private isTodoCompleted(todo: TaskTodoRecord): boolean {
@@ -845,7 +865,7 @@ export class TaskListComponent implements OnInit {
         return {
           id: userId,
           name: this.getTimelogUserName(firstRecord),
-          photoUrl: this.getTimelogUserPhoto(firstRecord),
+          photo: this.getTimelogUserPhoto(firstRecord),
           logs: logsWithLanes,
           lanes: Math.max(1, ...logsWithLanes.map((log) => log.lane + 1)),
         };
@@ -861,8 +881,13 @@ export class TaskListComponent implements OnInit {
       return null;
     }
 
-    const fallbackEnd = record.end ? undefined : new Date();
-    const endDate = this.parseDate(record.end) || fallbackEnd || startDate;
+    const loggedMinutes = Number(record.minuted_logged);
+    const durationEnd =
+      !record.end && Number.isFinite(loggedMinutes) && loggedMinutes > 0
+        ? new Date(startDate.getTime() + loggedMinutes * 60000)
+        : null;
+    const fallbackEnd = record.end || durationEnd ? undefined : new Date();
+    const endDate = this.parseDate(record.end) || durationEnd || fallbackEnd || startDate;
     const dayStart = new Date(startDate);
     dayStart.setHours(this.timelineStartHour, 0, 0, 0);
     const dayEnd = new Date(startDate);
@@ -878,7 +903,12 @@ export class TaskListComponent implements OnInit {
 
     return {
       id: record.id ?? `${record.user_id ?? 'user'}-${record.start}`,
-      label: record.name || `Timelog #${record.id ?? '-'}`,
+      label:
+        record.name ||
+        record.task_todo?.label ||
+        record.task_todo?.task?.title ||
+        record.task_todo?.task?.name ||
+        `Timelog #${record.id ?? '-'}`,
       left: ((startTime - dayStart.getTime()) / totalMs) * 100,
       width,
       lane: 0,
@@ -917,7 +947,7 @@ export class TaskListComponent implements OnInit {
 
         return {
           assignee: this.getTimelogUserName(record),
-          photoUrl: this.getTimelogUserPhoto(record),
+          photo: this.getTimelogUserPhoto(record),
           todo: taskTodo?.label || record.name || `Timelog #${record.id ?? '-'}`,
           status: this.getTimelogStatusLabel(record),
           created: record.created_at ? 1 : 0,
@@ -1038,11 +1068,15 @@ export class TaskListComponent implements OnInit {
   }
 
   private getTaskFilterUserId(): number | string | undefined {
-    if (this.isMember) {
+    if (this.isManager) {
+      return this.selectedUserId || undefined;
+    }
+
+    if (this.isMyTaskMode) {
       return this.getCurrentUserId();
     }
 
-    return this.selectedUserId || undefined;
+    return undefined;
   }
 
   private loadUsers(): void {
@@ -1063,7 +1097,10 @@ export class TaskListComponent implements OnInit {
   private filterRecordsBySelectedUser<
     T extends {
       user_id?: number | string;
-      user?: { id?: number | string } | null;
+      user?: { id?: number | string } | Array<{ id?: number | string }> | null;
+      users?: Array<{ id?: number | string }>;
+      assignee_user_ids?: Array<number | string> | string;
+      assignee_users?: Array<{ id?: number | string }>;
     },
   >(records: T[]): T[] {
     const selectedUserId = this.getTaskFilterUserId();
@@ -1071,20 +1108,44 @@ export class TaskListComponent implements OnInit {
       return records;
     }
 
-    return records.filter(
-      (record) => Number(record.user_id ?? record.user?.id) === Number(selectedUserId),
-    );
+    return records.filter((record) => this.getRecordUserIds(record).has(Number(selectedUserId)));
+  }
+
+  private getRecordUserIds(record: {
+    user_id?: number | string;
+    user?: { id?: number | string } | Array<{ id?: number | string }> | null;
+    users?: Array<{ id?: number | string }>;
+    assignee_user_ids?: Array<number | string> | string;
+    assignee_users?: Array<{ id?: number | string }>;
+  }): Set<number> {
+    const userIds = new Set<number>();
+    const addUserId = (value: number | string | undefined) => {
+      const id = Number(value);
+      if (Number.isInteger(id) && id > 0) {
+        userIds.add(id);
+      }
+    };
+
+    addUserId(record.user_id);
+
+    const users = Array.isArray(record.user) ? record.user : record.user ? [record.user] : [];
+    users.forEach((user) => addUserId(user?.id));
+    (record.users || []).forEach((user) => addUserId(user?.id));
+    (record.assignee_users || []).forEach((user) => addUserId(user?.id));
+    this.parseIdList(record.assignee_user_ids).forEach((id) => userIds.add(id));
+
+    return userIds;
   }
 
   private getTaskRelatedUserIds(task: TaskRecord): Set<number> {
     const relatedUserIds = new Set<number>();
-    const ownerId = Number(task.user_id ?? task.user?.id);
+    const ownerId = Number(task.user_id);
     if (Number.isInteger(ownerId) && ownerId > 0) {
       relatedUserIds.add(ownerId);
     }
 
-    this.parseIdList(task.assignee_user_ids).forEach((id) => relatedUserIds.add(id));
-    (task.assignee_users || []).forEach((user) => {
+    getTaskUserIds(task).forEach((id) => relatedUserIds.add(id));
+    getTaskUsers(task).forEach((user) => {
       const userId = Number(user?.id);
       if (Number.isInteger(userId) && userId > 0) {
         relatedUserIds.add(userId);

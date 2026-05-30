@@ -12,12 +12,25 @@ export interface HomeTaskRecord extends UserRelatedRecord {
   name?: string;
   status?: string;
   due_date?: string;
+  progress?: number | string;
 }
 
 export interface HomeTodoRecord extends UserRelatedRecord {
   id?: number | string;
   label?: string;
   task_id?: number | string;
+  status?: string;
+  progress?: number | string;
+  due_date?: string;
+}
+
+export interface HomeTimelogRecord extends UserRelatedRecord {
+  id?: number | string;
+  name?: string;
+  status?: string;
+  start?: string;
+  end?: string;
+  task_todo_id?: number | string;
 }
 
 export type TaskTab = 'ongoing' | 'completed';

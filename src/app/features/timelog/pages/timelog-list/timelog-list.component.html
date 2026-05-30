@@ -95,10 +95,16 @@
       >
         <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
           <img
-            [src]="userPhoto()"
+            *ngIf="getTimelogFilePhoto; else headerAvatarFallback"
+            [src]="item.userPhoto"
             alt="User photo"
             class="h-11 w-11 rounded-full border border-primary-200 object-cover"
           />
+          <ng-template #headerAvatarFallback>
+            <span class="grid h-11 w-11 place-items-center rounded-full bg-tertiary-200 text-sm font-extrabold text-tertiary-950">
+              {{ item.displayName.charAt(0).toUpperCase() }}
+            </span>
+          </ng-template>
 
           <div class="min-w-0">
             <div class="flex items-start gap-4">

@@ -1,26 +1,43 @@
-<aside class="sticky top-0 flex h-dvh w-60 flex-col bg-[#1A2026] px-6 py-6 text-[#D9D9D9]">
-  <div class="flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold">
-    <img src="images/ondary-logo-white.png" alt="Ondary" class="h-12 w-auto" />
+<aside
+  #sidebarPanel
+  class="relative sticky top-0 flex h-dvh w-20 shrink-0 flex-col overflow-y-auto overflow-x-visible bg-[#1A2026] px-4 py-6 text-[#D9D9D9]"
+  [class.sidebar-collapsed]="isCollapsed"
+>
+  <div class="relative flex items-center justify-center rounded-2xl px-1 py-3 text-sm font-semibold">
+    <img
+      src="images/ondary-logo-white.png"
+      alt="Ondary"
+      class="h-10 w-auto max-w-12 object-contain"
+      [class.max-w-40]="!isCollapsed"
+    />
   </div>
 
-  <nav class="mt-10 flex-1 space-y-2">
+  <nav class="mt-8 flex-1 space-y-2">
     <a
       *ngFor="let item of visibleNavItems"
       [routerLink]="item.route"
       routerLinkActive="bg-tertiary-50 text-tertiary-700"
       [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
-      class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-[#D9D9D9] transition hover:bg-tertiary-100 hover:text-tertiary-700"
+      class="flex h-12 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold text-[#D9D9D9] transition hover:bg-tertiary-100 hover:text-tertiary-700"
+      [class.justify-center]="isCollapsed"
+      [class.justify-start]="!isCollapsed"
+      [title]="isCollapsed ? item.label : ''"
     >
-      <span>{{ item.label }}</span>
+      <fc-icon [icon]="item.icon" class="shrink-0 text-xl"></fc-icon>
+      <span #collapsibleLabel class="whitespace-nowrap">{{ item.label }}</span>
     </a>
   </nav>
 
   <button
     type="button"
-    class="mt-auto flex items-center justify-center rounded-2xl bg-tertiary-300 px-4 py-3 text-sm font-semibold text-tertiary-700 transition hover:bg-tertiary-400"
+    class="mt-auto flex h-12 items-center gap-3 rounded-2xl bg-tertiary-300 px-3 text-sm font-semibold text-black transition hover:bg-tertiary-400"
+    [class.justify-center]="isCollapsed"
+    [class.justify-start]="!isCollapsed"
+    [title]="isCollapsed ? 'Logout' : ''"
     (click)="openLogoutDialog()"
   >
-    Logout
+    <fc-icon icon="signout-linear" class="shrink-0 text-xl"></fc-icon>
+    <span #collapsibleLabel class="whitespace-nowrap">Logout</span>
   </button>
 </aside>
 

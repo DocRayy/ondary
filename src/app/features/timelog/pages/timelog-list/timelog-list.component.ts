@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
-import { AuthService, AuthUser } from '../../../../core/auth/auth.service';
+import { AuthService } from '../../../../core/auth/auth.service';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { getApiMediaUrl } from '../../../../shared/utils/media';
@@ -19,6 +19,8 @@ interface TimelogItem {
   record: TimelogRecord;
   title: string;
   user: string;
+  userPhoto: string;
+  displayName: string;
   startTime: string;
   endTime: string;
   duration: string;
@@ -43,7 +45,6 @@ export class TimelogListComponent implements OnInit, OnDestroy {
   private readonly timelogService = inject(TimelogService);
   private readonly activeTimelogService = inject(ActiveTimelogService);
   private readonly toastService = inject(ToastService);
-  readonly user = signal<AuthUser | null>(this.authService.getUser());
 
   timelogs: TimelogItem[] = [];
   activeTimelog: ActiveTimelog | null = null;
@@ -58,13 +59,6 @@ export class TimelogListComponent implements OnInit, OnDestroy {
 
   private elapsedTimerId?: ReturnType<typeof setInterval>;
   private timelogEndedSubscription?: Subscription;
-
-  readonly userPhoto = computed(() => {
-    const user = this.user();
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
-
-    return getApiMediaUrl(photo) || 'images/home-user.png';
-  });
 
   ngOnInit(): void {
     this.loadTimelogs();
@@ -205,6 +199,8 @@ export class TimelogListComponent implements OnInit, OnDestroy {
       record,
       title: record.name || `Timelog #${record.id ?? '-'}`,
       user: record.user?.username || record.user?.name || `User #${record.user_id ?? '-'}`,
+      userPhoto: this.getTimelogUserPhoto(record),
+      displayName: this.getTimelogUserName(record),
       startTime: this.formatTime(record.start),
       endTime: record.end ? this.formatTime(record.end) : '-',
       duration: record.end ? this.formatMinutes(durationMinutes) : this.formatElapsed(record.start),
@@ -216,6 +212,17 @@ export class TimelogListComponent implements OnInit, OnDestroy {
 
   getTimelogFilePhoto(file: TimelogFileRecord): string | null {
     return getApiMediaUrl(file.photo);
+  }
+
+  private getTimelogUserName(record: TimelogRecord): string {
+    return record.user?.username || record.user?.name || `User #${record.user_id ?? '-'}`;
+  }
+
+  private getTimelogUserPhoto(record: TimelogRecord): string {
+    const user = record.user;
+    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
+
+    return getApiMediaUrl(photo) || 'images/home-user.png';
   }
 
   private getTimelogFiles(record: TimelogRecord): TimelogFileRecord[] {

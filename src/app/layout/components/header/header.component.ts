@@ -1,11 +1,23 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders, HttpResponse } from '@angular/common/http';
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { Subscription } from 'rxjs';
 import dayjs from 'dayjs';
 import { environment } from '../../../../environments/environment';
 import { AuthService, AuthUser } from '../../../core/auth/auth.service';
 import { NotificationItem, NotificationService } from '../../../core/notifications/notification.service';
+import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
+import { normalizeApiId } from '../../../shared/utils/api-id';
 import { getApiMediaUrl } from '../../../shared/utils/media';
 import 'dayjs/locale/en';
 
@@ -23,8 +35,9 @@ declare global {
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FcIconComponent],
   templateUrl: './header.component.html',
+  styleUrl: './header.component.css',
 })
 export class HeaderComponent implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
@@ -33,6 +46,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
   private readonly apiUrl = environment.API_URL;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private notificationSubscription: Subscription | null = null;
+  @Input() isSidebarCollapsed = false;
+  @Output() sidebarToggle = new EventEmitter<void>();
 
   readonly now = signal(new Date());
   readonly notificationsOpen = signal(false);
@@ -94,6 +109,10 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.notificationsOpen.set(false);
   }
 
+  toggleSidebar(): void {
+    this.sidebarToggle.emit();
+  }
+
   installNow(): void {
     if (this.isInstallingDesktop()) {
       return;
@@ -137,13 +156,14 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   private loadLoggedInUser(): void {
     const currentUser = this.authService.getUser();
+    const userId = normalizeApiId(currentUser?.id);
 
-    if (!currentUser?.id) {
+    if (userId === null) {
       return;
     }
 
     this.http
-      .get<UserResponse>(`${this.apiUrl}/users/${currentUser.id}`, {
+      .get<UserResponse>(`${this.apiUrl}/users/${userId}`, {
         headers: this.createAuthHeaders(),
       })
       .subscribe({

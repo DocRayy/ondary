@@ -51,6 +51,7 @@
     "@ng-icons/core": "^33.2.0",
     "@ng-icons/lucide": "^33.2.0",
     "@primeuix/themes": "^1.2.5",
+    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.20",

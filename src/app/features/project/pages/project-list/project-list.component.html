@@ -252,4 +252,12 @@
     (cancel)="closeDeleteDialog()"
     (confirm)="confirmDeleteProject()"
   ></app-confirmation-modal>
+
+  <app-image-cropper
+    [visible]="!!formCropFile"
+    [file]="formCropFile"
+    title="Crop Project Photo"
+    (cancel)="cancelProjectPhotoCrop()"
+    (cropped)="applyProjectPhotoCrop($event)"
+  ></app-image-cropper>
 </section>

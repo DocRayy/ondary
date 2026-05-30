@@ -45,6 +45,10 @@ export interface TimelogRecord
     username?: string;
     name?: string;
     email?: string;
+    photo?: string;
+    photo_url?: string;
+    avatar?: string;
+    image?: string;
   } | null;
   task_todo?: {
     id?: number | string;

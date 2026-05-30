@@ -1,134 +1,190 @@
-<section class="space-y-8 pr-8 text-black">
-  <div class="flex items-center gap-4">
-    <h1 class="text-base font-extrabold text-white">My Reports</h1>
+<section class="space-y-7 pr-8 text-white">
+  <div class="flex flex-col gap-5 lg:flex-row lg:items-end">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-normal text-white">My Reports</h1>
+      <p class="mt-2 text-base font-medium text-white/90">
+        Overview of your tasks, projects, and time tracking.
+      </p>
+    </div>
 
-    <div class="ml-auto flex items-center gap-2">
+    <div class="ml-auto flex items-center gap-3">
       <button
         type="button"
-        class="grid h-11 w-11 place-items-center rounded-xl bg-tertiary-100 text-lg font-bold transition hover:bg-tertiary-200"
+        class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-primary-950 shadow-sm transition hover:bg-tertiary-200"
         (click)="previousMonth()"
         aria-label="Previous month"
       >
-        ‹
+        <fc-icon icon="previous-linear" class="text-xl"></fc-icon>
       </button>
       <div
-        class="grid h-11 min-w-44 place-items-center rounded-xl bg-tertiary-100 px-6 text-sm font-bold"
+        class="grid h-14 min-w-48 place-items-center rounded-2xl bg-white px-7 text-base font-extrabold text-primary-950 shadow-sm"
       >
         {{ monthLabel() }}
       </div>
       <button
         type="button"
-        class="grid h-11 w-11 place-items-center rounded-xl bg-tertiary-100 text-lg font-bold transition hover:bg-tertiary-200"
+        class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-primary-950 shadow-sm transition hover:bg-tertiary-200"
         (click)="nextMonth()"
         aria-label="Next month"
       >
-        ›
+        <fc-icon icon="next-linear" class="text-xl"></fc-icon>
       </button>
     </div>
   </div>
 
   <div
     *ngIf="isLoading()"
-    class="rounded-xl bg-tertiary-100 px-5 py-4 text-sm font-bold text-tertiary-700"
+    class="rounded-2xl border border-white/10 bg-primary-800/70 px-5 py-4 text-sm font-bold text-white/80 shadow-sm"
   >
     Loading reports...
   </div>
 
   <div
     *ngIf="!isLoading() && errorMessage()"
-    class="rounded-xl bg-red-50 px-5 py-4 text-sm font-bold text-red-700"
+    class="rounded-2xl border border-red-200/20 bg-red-500/15 px-5 py-4 text-sm font-bold text-red-100 shadow-sm"
   >
     {{ errorMessage() }}
   </div>
 
-  <div class="grid gap-3 lg:grid-cols-[1.35fr_0.62fr_1fr]">
+  <div class="grid gap-6 xl:grid-cols-[1.35fr_0.9fr_1.2fr]">
     <article
-      class="flex min-h-[100px] items-center gap-5 rounded-xl border border-tertiary-200 bg-tertiary-50 px-6 py-4"
+      class="flex min-h-56 items-center gap-8 rounded-2xl bg-primary-800/75 px-8 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
     >
-      <div class="grid h-[74px] w-[74px] place-items-center rounded-md bg-tertiary-200">
-        <fc-icon icon="clock-linear" class="text-5xl text-black"></fc-icon>
+      <div class="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-[#31445F]">
+        <fc-icon icon="clock-linear" class="text-7xl text-white"></fc-icon>
       </div>
       <div>
-        <p class="text-sm font-extrabold">Total Time Spend</p>
-        <p class="mt-5 text-2xl font-extrabold">{{ formatMinutes(totalMinutes()) }}</p>
-        <p class="mt-1 text-xs italic">Total of {{ totalProjects() }} Projects</p>
+        <p class="text-base font-extrabold text-white">Total Time Spend</p>
+        <p class="mt-6 text-4xl font-extrabold leading-none text-white">
+          {{ formatMinutes(totalMinutes()) }}
+        </p>
+        <p class="mt-4 text-sm font-medium italic text-white/90">
+          Total of {{ totalProjects() }} Projects
+        </p>
       </div>
     </article>
 
-    <div class="grid gap-2">
-      <div
-        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
-      >
-        <span class="text-xl font-extrabold">{{ totalTodos() }}</span>
-        <span class="text-sm font-extrabold">Todos</span>
+    <article
+      class="min-h-56 rounded-2xl bg-primary-800/75 px-7 py-5 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
+    >
+      <div class="grid h-full content-center">
+        <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 border-b border-white/10 py-3">
+          <span
+            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 text-base font-extrabold text-white"
+          >
+            {{ totalTodos() }}
+          </span>
+          <span class="text-base font-extrabold text-white">Todos</span>
+          <fc-icon icon="arrow-right-linear" class="text-xl text-white"></fc-icon>
+        </div>
+        <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 border-b border-white/10 py-3">
+          <span
+            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-blue-700 text-base font-extrabold text-white"
+          >
+            {{ totalProjects() }}
+          </span>
+          <span class="text-base font-extrabold text-white">Projects</span>
+          <fc-icon icon="arrow-right-linear" class="text-xl text-white"></fc-icon>
+        </div>
+        <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 py-3">
+          <span
+            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-green-400 to-emerald-700 text-base font-extrabold text-white"
+          >
+            {{ totalCompleted() }}
+          </span>
+          <span class="text-base font-extrabold text-white">Completed</span>
+          <fc-icon icon="arrow-right-linear" class="text-xl text-white"></fc-icon>
+        </div>
       </div>
-      <div
-        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
-      >
-        <span class="text-xl font-extrabold">{{ totalProjects() }}</span>
-        <span class="text-sm font-extrabold">Projects</span>
-      </div>
-      <div
-        class="grid h-[30px] grid-cols-[56px_1fr] items-center rounded-xl border border-tertiary-200 bg-tertiary-50 px-6"
-      >
-        <span class="text-xl font-extrabold">{{ totalCompleted() }}</span>
-        <span class="text-sm font-extrabold">Completed</span>
-      </div>
-    </div>
+    </article>
 
-    <div class="grid gap-2">
-      <article
-        class="flex min-h-16 items-center justify-center gap-5 rounded-xl border border-tertiary-200 bg-tertiary-50 px-6 py-3"
-      >
-        <fc-icon icon="fire-linear" class="text-5xl text-black"></fc-icon>
-        <p class="text-2xl font-extrabold leading-tight">Excellent<br />Work</p>
-      </article>
+    <article
+      class="grid min-h-56 content-center gap-8 rounded-2xl bg-primary-800/75 px-8 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
+    >
+      <div class="flex items-center justify-center gap-8">
+        <div
+          class="grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-indigo-300 to-indigo-700"
+        >
+          <fc-icon icon="badge-linear" class="text-6xl text-white"></fc-icon>
+        </div>
+        <p class="text-3xl font-extrabold leading-tight text-white">
+          Excellent<br />Work
+        </p>
+      </div>
       <button
         type="button"
-        class="h-[30px] rounded-xl bg-tertiary-200 text-xs font-extrabold transition hover:bg-tertiary-300"
+        class="mx-auto flex h-14 w-full max-w-[520px] items-center justify-center gap-3 rounded-xl bg-[#31445F] px-6 text-base font-extrabold text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-70"
         (click)="generatePdf()"
         [disabled]="isGeneratingPdf()"
       >
+        <fc-icon icon="document-download-linear" class="text-xl"></fc-icon>
         {{ isGeneratingPdf() ? 'Generating...' : 'Generate PDF' }}
       </button>
-    </div>
+    </article>
   </div>
 
-  <div class="overflow-x-auto text-white">
-    <div class="min-w-[900px]">
+  <section
+    class="overflow-x-auto rounded-2xl bg-primary-800/75 px-6 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
+  >
+    <div class="min-w-[1180px]">
       <div
-        class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] border-b border-black px-0 pb-3 text-xs font-medium"
+        class="grid grid-cols-[2.3fr_0.8fr_0.7fr_0.8fr_1.15fr_0.85fr_1.25fr_40px] px-1 pb-6 text-sm font-extrabold text-white/70"
       >
-        <span>Assigne &gt; Todo</span>
+        <span>Assignee &gt; Todo</span>
         <span>Status</span>
         <span>Created</span>
         <span>Completed</span>
         <span>Project</span>
         <span>Time Spend</span>
+        <span>Created At</span>
+        <span></span>
       </div>
 
-      <div class="pt-5">
+      <ng-container *ngFor="let row of reportRows(); let i = index; trackBy: trackRowById">
         <div
-          *ngFor="let row of reportRows(); trackBy: trackRowById"
-          class="grid grid-cols-[1.7fr_1fr_0.8fr_0.9fr_1.25fr_0.75fr] items-center py-2 text-sm"
+          *ngIf="shouldShowGroupSeparator(i, row)"
+          class="mb-4 mt-3 flex h-16 items-center gap-4 rounded-xl bg-[#31445F] px-5 text-base font-extrabold text-white"
+        >
+          <fc-icon icon="calendar-linear" class="text-2xl text-white"></fc-icon>
+          {{ getGroupLabel(row) }}
+        </div>
+
+        <div
+          class="grid grid-cols-[2.3fr_0.8fr_0.7fr_0.8fr_1.15fr_0.85fr_1.25fr_40px] items-center px-5 py-5 text-base text-white"
         >
           <div class="flex min-w-0 items-center gap-2">
-            <span class="truncate font-bold">{{ row.assignee }} &gt; {{ row.todo }}</span>
+            <span class="truncate font-extrabold">{{ row.assignee }} &gt; {{ row.todo }}</span>
           </div>
-          <span>{{ row.status }}</span>
+          <span
+            class="w-fit rounded-xl px-4 py-2 text-sm font-extrabold"
+            [ngClass]="{
+              'bg-success-600 text-white': row.status === 'finish' || row.status === 'completed',
+              'bg-[#31445F] text-white': row.status !== 'finish' && row.status !== 'completed'
+            }"
+          >
+            {{ row.status }}
+          </span>
           <span>{{ row.created }}</span>
           <span>{{ row.completed }}</span>
-          <span class="truncate">{{ row.project }}</span>
+          <span class="truncate">{{ row.project || '-' }}</span>
           <span>{{ formatMinutes(row.timeSpendMinutes) }}</span>
+          <span class="truncate">{{ formatCreatedAt(row.createdAt) }}</span>
+          <button
+            type="button"
+            class="grid h-9 w-9 place-items-center rounded-lg text-white/80 transition hover:bg-white/10 hover:text-white"
+            aria-label="Report actions"
+          >
+            <fc-icon icon="dots-v-linear" class="text-2xl"></fc-icon>
+          </button>
         </div>
+      </ng-container>
 
-        <div
-          *ngIf="!reportRows().length && !isLoading()"
-          class="py-5 text-sm font-bold text-tertiary-600"
-        >
-          No report data for this month.
-        </div>
+      <div
+        *ngIf="!reportRows().length && !isLoading()"
+        class="rounded-xl bg-[#31445F] px-5 py-5 text-sm font-bold text-white/80"
+      >
+        No report data for this month.
       </div>
     </div>
-  </div>
+  </section>
 </section>

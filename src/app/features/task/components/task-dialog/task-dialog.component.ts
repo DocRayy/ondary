@@ -23,6 +23,9 @@ import {
   TaskStatus,
   TaskTodoRecord,
   UserOption,
+  getTaskUserIds,
+  getTaskUsers,
+  parseTaskIdList,
 } from '../../schema/task.schema';
 import { TaskService } from '../../service/task.service';
 import { ActiveTimelogService } from '../../../timelog/service/active-timelog.service';
@@ -506,7 +509,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
           this.taskCreated.emit({
             ...task,
             assignee_user_ids: this.selectedUsers.map((user) => Number(user.id)),
-            assignee_users: this.selectedUsers,
+            user: this.selectedUsers,
             label_ids: this.selectedLabels.map((label) => Number(label.id)),
             labels: this.selectedLabels,
           });
@@ -640,7 +643,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
           ...this.task,
           ...updatedTask,
           assignee_user_ids: this.selectedUsers.map((user) => Number(user.id)),
-          assignee_users: this.selectedUsers,
+          user: this.selectedUsers,
           label_ids: this.selectedLabels.map((label) => Number(label.id)),
           labels: this.selectedLabels,
         };
@@ -925,11 +928,12 @@ export class TaskDialogComponent implements OnInit, OnChanges {
   }
 
   private createSelectedUsers(task: TaskRecord): UserOption[] {
-    if (task.assignee_users?.length) {
-      return task.assignee_users;
+    const taskUsers = getTaskUsers(task);
+    if (taskUsers.length) {
+      return taskUsers;
     }
 
-    const assigneeIds = this.parseIdList(task.assignee_user_ids);
+    const assigneeIds = getTaskUserIds(task);
     const selectedIds = assigneeIds.length
       ? assigneeIds
       : this.parseIdList(task.user_id ? [task.user_id] : []);
@@ -966,23 +970,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
   }
 
   private parseIdList(value: Array<number | string> | string | undefined): number[] {
-    if (Array.isArray(value)) {
-      return value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0);
-    }
-
-    if (!value) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? this.parseIdList(parsed) : [];
-    } catch {
-      return value
-        .split(',')
-        .map((item) => Number(item.trim()))
-        .filter((item) => Number.isInteger(item) && item > 0);
-    }
+    return parseTaskIdList(value);
   }
 
   private getTaskTodos(task: TaskRecord): TaskTodoRecord[] {
@@ -1022,13 +1010,13 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     });
 
     if (this.task) {
-      const ownerId = Number(this.task.user_id ?? this.task.user?.id);
+      const ownerId = Number(this.task.user_id);
       if (Number.isInteger(ownerId) && ownerId > 0) {
         userIds.add(ownerId);
       }
 
-      this.parseIdList(this.task.assignee_user_ids).forEach((id) => userIds.add(id));
-      (this.task.assignee_users || []).forEach((user) => {
+      getTaskUserIds(this.task).forEach((id) => userIds.add(id));
+      getTaskUsers(this.task).forEach((user) => {
         const userId = Number(user?.id);
         if (Number.isInteger(userId) && userId > 0) {
           userIds.add(userId);

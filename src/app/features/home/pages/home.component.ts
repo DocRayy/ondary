@@ -1,5 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
@@ -7,10 +17,33 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../core/auth/role-permission.service';
 import dayjs from 'dayjs';
 import 'dayjs/locale/en';
-import { HomeTaskRecord, HomeTodoRecord, TaskTab, UserRelatedRecord } from '../schema/home.schema';
+import { Chart, ChartConfiguration, ChartOptions, registerables } from 'chart.js';
+import gsap from 'gsap';
+import {
+  HomeTaskRecord,
+  HomeTimelogRecord,
+  HomeTodoRecord,
+  TaskTab,
+  UserRelatedRecord,
+} from '../schema/home.schema';
 import { HomeService } from '../service/home.service';
 import { ManagerNotesComponent } from '../components/manager-notes/manager-notes.component';
 import { StickyNotesComponent } from '../components/sticky-notes/sticky-notes.component';
+
+Chart.register(...registerables);
+
+type ManagerChartRecord =
+  | (HomeTaskRecord & { recordType: 'task' })
+  | (HomeTodoRecord & { recordType: 'todo' })
+  | (HomeTimelogRecord & { recordType: 'timelog' });
+
+type ManagerChartBucket = {
+  labels: string[];
+  ongoing: number[];
+  completed: number[];
+  max: number;
+  stepSize: number;
+};
 
 @Component({
   selector: 'app-home',
@@ -18,10 +51,15 @@ import { StickyNotesComponent } from '../components/sticky-notes/sticky-notes.co
   imports: [CommonModule, FormsModule, RouterLink, ManagerNotesComponent, StickyNotesComponent],
   templateUrl: './home.component.html',
 })
-export class HomeComponent implements OnInit {
+export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly permission = inject(RolePermissionService);
   private readonly homeService = inject(HomeService);
+  @ViewChild('managerTaskChart') private managerTaskChartRef?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('managerChartPanel') private managerChartPanelRef?: ElementRef<HTMLDivElement>;
+
+  private managerChart?: Chart<'line'>;
+  private managerChartReady = false;
 
   readonly currentUser = signal(this.authService.getUser());
   readonly tasksCount = signal(0);
@@ -32,6 +70,9 @@ export class HomeComponent implements OnInit {
   readonly loadingSummary = signal(false);
   readonly activeTaskTab = signal<TaskTab>('ongoing');
   readonly userTasks = signal<HomeTaskRecord[]>([]);
+  readonly chartTasks = signal<HomeTaskRecord[]>([]);
+  readonly chartTodos = signal<HomeTodoRecord[]>([]);
+  readonly chartTimelogs = signal<HomeTimelogRecord[]>([]);
   readonly managerFilter = signal<'days' | 'weeks' | 'months'>('days');
   readonly managerDate = signal(new Date());
   readonly isManager = this.permission.isManager();
@@ -129,6 +170,15 @@ export class HomeComponent implements OnInit {
     this.loadUserSummary();
   }
 
+  ngAfterViewInit(): void {
+    this.managerChartReady = true;
+    this.renderManagerChart();
+  }
+
+  ngOnDestroy(): void {
+    this.managerChart?.destroy();
+  }
+
   private loadUserSummary(): void {
     const userId = this.currentUser()?.id;
 
@@ -141,22 +191,25 @@ export class HomeComponent implements OnInit {
     forkJoin({
       tasks: this.homeService.getCollection<HomeTaskRecord>('/task'),
       todos: this.homeService.getCollection<HomeTodoRecord>('/task-todos'),
-      timelogs: this.homeService.getCollection('/timelogs'),
+      timelogs: this.homeService.getCollection<HomeTimelogRecord>('/timelogs'),
     }).subscribe({
       next: ({ tasks, todos, timelogs }) => {
         const currentUserTasks = this.filterByUserId(tasks, userId);
         const visibleTasks = this.isManager ? tasks : currentUserTasks;
         const visibleTodos = this.isManager ? todos : this.filterByUserId(todos, userId);
+        const visibleTimelogs = this.isManager ? timelogs : this.filterByUserId(timelogs, userId);
 
         this.userTasks.set(visibleTasks);
+        this.chartTasks.set(visibleTasks);
+        this.chartTodos.set(visibleTodos);
+        this.chartTimelogs.set(visibleTimelogs);
         this.tasksCount.set(visibleTasks.length);
         this.todosCount.set(visibleTodos.length);
-        this.timelogsCount.set(
-          this.isManager ? timelogs.length : this.countByUserId(timelogs, userId),
-        );
+        this.timelogsCount.set(visibleTimelogs.length);
         this.taskDailyComparisonText.set(this.getTaskDailyComparisonText(visibleTasks));
         this.todosLastUpdateText.set(this.getTodosLastUpdateText(visibleTodos));
         this.loadingSummary.set(false);
+        this.renderManagerChart();
       },
       error: () => {
         this.loadingSummary.set(false);
@@ -174,10 +227,12 @@ export class HomeComponent implements OnInit {
 
   setManagerFilter(filter: 'days' | 'weeks' | 'months'): void {
     this.managerFilter.set(filter);
+    this.renderManagerChart();
   }
 
   selectManagerDate(date: Date): void {
     this.managerDate.set(date);
+    this.renderManagerChart();
   }
 
   getManagerDateLabel(date: Date): string {
@@ -222,7 +277,9 @@ export class HomeComponent implements OnInit {
   }
 
   private isOngoingTask(status: string | undefined): boolean {
-    return ['draft', 'progress', 'on_hold'].includes(this.normalizeStatus(status));
+    return ['draft', 'progress', 'on_hold', 'ongoing', 'on going', 'active', 'pending'].includes(
+      this.normalizeStatus(status),
+    );
   }
 
   private getTaskDailyComparisonText(tasks: HomeTaskRecord[]): string {
@@ -264,6 +321,247 @@ export class HomeComponent implements OnInit {
     return (status ?? '').toLowerCase().trim();
   }
 
+  private isCompletedStatus(status: string | undefined, progress?: number | string): boolean {
+    const normalizedStatus = this.normalizeStatus(status);
+    const numericProgress = Number(progress ?? 0);
+    return (
+      ['completed', 'finish', 'finished', 'done'].includes(normalizedStatus) ||
+      (Number.isFinite(numericProgress) && numericProgress >= 100)
+    );
+  }
+
+  private renderManagerChart(): void {
+    if (!this.isManager || !this.managerChartReady || !this.managerTaskChartRef) {
+      return;
+    }
+
+    const bucket = this.getManagerChartBucket();
+    const canvas = this.managerTaskChartRef.nativeElement;
+    const panel = this.managerChartPanelRef?.nativeElement;
+
+    const datasets = [
+      {
+        label: 'On Going',
+        data: bucket.ongoing,
+        borderColor: '#FACC15',
+        backgroundColor: 'rgba(250, 204, 21, 0.16)',
+        pointBackgroundColor: '#FACC15',
+        pointBorderColor: '#1E293B',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 3,
+        tension: 0.38,
+        fill: true,
+      },
+      {
+        label: 'Completed',
+        data: bucket.completed,
+        borderColor: '#4ADE80',
+        backgroundColor: 'rgba(74, 222, 128, 0.14)',
+        pointBackgroundColor: '#4ADE80',
+        pointBorderColor: '#1E293B',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 3,
+        tension: 0.38,
+        fill: true,
+      },
+    ];
+
+    if (!this.managerChart) {
+      const config: ChartConfiguration<'line'> = {
+        type: 'line',
+        data: {
+          labels: bucket.labels,
+          datasets,
+        },
+        options: this.getManagerChartOptions(bucket.max, bucket.stepSize),
+      };
+
+      this.managerChart = new Chart(canvas, config);
+    } else {
+      this.managerChart.data.labels = bucket.labels;
+      this.managerChart.data.datasets = datasets;
+      this.managerChart.options = this.getManagerChartOptions(bucket.max, bucket.stepSize);
+      this.managerChart.update();
+    }
+
+    if (panel) {
+      gsap.killTweensOf(panel);
+      gsap.fromTo(
+        panel,
+        { autoAlpha: 0.78, y: 12 },
+        { autoAlpha: 1, y: 0, duration: 0.42, ease: 'power2.out' },
+      );
+    }
+  }
+
+  private getManagerChartOptions(max: number, stepSize: number): ChartOptions<'line'> {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 650,
+        easing: 'easeOutQuart',
+      },
+      interaction: {
+        intersect: false,
+        mode: 'index',
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#F8FAFC',
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            font: {
+              family: 'Inter, sans-serif',
+              size: 12,
+              weight: 'bold',
+            },
+          },
+        },
+        tooltip: {
+          backgroundColor: '#0F172A',
+          borderColor: '#475569',
+          borderWidth: 1,
+          titleColor: '#F8FAFC',
+          bodyColor: '#E2E8F0',
+          displayColors: true,
+        },
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(148, 163, 184, 0.16)',
+          },
+          ticks: {
+            color: '#CBD5E1',
+            font: {
+              size: 11,
+              weight: 'bold',
+            },
+          },
+        },
+        y: {
+          min: 0,
+          max,
+          ticks: {
+            stepSize,
+            color: '#CBD5E1',
+            font: {
+              size: 11,
+              weight: 'bold',
+            },
+          },
+          grid: {
+            color: 'rgba(148, 163, 184, 0.18)',
+          },
+        },
+      },
+    };
+  }
+
+  private getManagerChartBucket(): ManagerChartBucket {
+    const filter = this.managerFilter();
+
+    if (filter === 'days') {
+      return this.buildManagerChartBucket(
+        Array.from({ length: 11 }, (_, index) => `${String(index + 7).padStart(2, '0')}:00`),
+        30,
+        5,
+        (date) => date.getHours() - 7,
+      );
+    }
+
+    if (filter === 'weeks') {
+      return this.buildManagerChartBucket(
+        ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        200,
+        50,
+        (date) => (date.getDay() + 6) % 7,
+      );
+    }
+
+    const weekCount = this.getWeekOfMonth(
+      new Date(this.managerDate().getFullYear(), this.managerDate().getMonth() + 1, 0),
+    );
+    return this.buildManagerChartBucket(
+      Array.from({ length: weekCount }, (_, index) => `Week ${index + 1}`),
+      500,
+      100,
+      (date) => this.getWeekOfMonth(date) - 1,
+    );
+  }
+
+  private buildManagerChartBucket(
+    labels: string[],
+    max: number,
+    stepSize: number,
+    getIndex: (date: Date) => number,
+  ): ManagerChartBucket {
+    const ongoing = Array.from({ length: labels.length }, () => 0);
+    const completed = Array.from({ length: labels.length }, () => 0);
+
+    this.getFilteredManagerChartRecords().forEach((record) => {
+      const date = this.getManagerRecordDate(record);
+      if (!date) {
+        return;
+      }
+
+      const index = getIndex(date);
+      if (index < 0 || index >= labels.length) {
+        return;
+      }
+
+      const progress = record.recordType === 'timelog' ? undefined : record.progress;
+      if (this.isCompletedStatus(record.status, progress)) {
+        completed[index] += 1;
+        return;
+      }
+
+      if (this.isOngoingTask(record.status)) {
+        ongoing[index] += 1;
+      }
+    });
+
+    return { labels, ongoing, completed, max, stepSize };
+  }
+
+  private getFilteredManagerChartRecords(): ManagerChartRecord[] {
+    const records: ManagerChartRecord[] = [
+      ...this.chartTasks().map((record) => ({ ...record, recordType: 'task' as const })),
+      ...this.chartTodos().map((record) => ({ ...record, recordType: 'todo' as const })),
+      ...this.chartTimelogs().map((record) => ({ ...record, recordType: 'timelog' as const })),
+    ];
+
+    return records.filter((record) => {
+      const date = this.getManagerRecordDate(record);
+      if (!date) {
+        return false;
+      }
+
+      if (this.managerFilter() === 'days') {
+        return this.isSameDate(date, this.managerDate());
+      }
+
+      if (this.managerFilter() === 'weeks') {
+        return this.isSameWeek(date, this.managerDate());
+      }
+
+      return this.isSameMonth(date, this.managerDate());
+    });
+  }
+
+  private getManagerRecordDate(record: ManagerChartRecord): Date | null {
+    if (record.recordType === 'timelog') {
+      return this.parseDate(record.start || record.end || record.created_at || record.updated_at);
+    }
+
+    return this.parseDate(record.due_date || record.created_at || record.updated_at);
+  }
+
   private parseDate(value?: string | Date | null): Date | null {
     if (!value) {
       return null;
@@ -283,6 +581,19 @@ export class HomeComponent implements OnInit {
 
   private isSameMonth(first: Date, second: Date): boolean {
     return first.getFullYear() === second.getFullYear() && first.getMonth() === second.getMonth();
+  }
+
+  private isSameWeek(first: Date, second: Date): boolean {
+    const firstStart = this.getStartOfWeek(first);
+    const secondStart = this.getStartOfWeek(second);
+    return this.isSameDate(firstStart, secondStart);
+  }
+
+  private getStartOfWeek(date: Date): Date {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return start;
   }
 
   private getWeekOfMonth(date: Date): number {

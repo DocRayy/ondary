@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '../../../shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 
 export interface MemberRecord {
@@ -65,15 +66,25 @@ export class MemberService {
   }
 
   updateUser(userId: number | string, payload: Partial<MemberRecord> | FormData) {
+    const id = normalizeApiId(userId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('user id'));
+    }
+
     return this.http
-      .patch<ApiItemResponse<MemberRecord>>(`${this.apiUrl}/users/${userId}`, payload, {
+      .patch<ApiItemResponse<MemberRecord>>(`${this.apiUrl}/users/${id}`, payload, {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
   deleteUser(userId: number | string) {
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/users/${userId}`, {
+    const id = normalizeApiId(userId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('user id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/users/${id}`, {
       headers: this.createAuthHeaders(),
     });
   }

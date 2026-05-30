@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../../core/auth/auth.service';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { ImageCropperComponent } from '../../../../shared/components/image-cropper/image-cropper.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
 import { getApiMediaUrl, imageAcceptAttribute, isAllowedImageFile } from '../../../../shared/utils/media';
@@ -13,7 +14,14 @@ import { ProjectService } from '../../service/project.service';
 @Component({
   selector: 'app-project-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, FcIconComponent, ConfirmationModalComponent, GsapModalDirective],
+  imports: [
+    CommonModule,
+    FormsModule,
+    FcIconComponent,
+    ConfirmationModalComponent,
+    GsapModalDirective,
+    ImageCropperComponent,
+  ],
   templateUrl: './project-list.component.html',
 })
 export class ProjectListComponent implements OnInit {
@@ -34,6 +42,7 @@ export class ProjectListComponent implements OnInit {
   formDescription = '';
   formPhotoFile: File | null = null;
   formPhotoPreview = '';
+  formCropFile: File | null = null;
   readonly imageAccept = imageAcceptAttribute();
 
   readonly totalProjects = computed(() => this.projects().length);
@@ -59,6 +68,8 @@ export class ProjectListComponent implements OnInit {
     this.formLabel = '';
     this.formDescription = '';
     this.formPhotoFile = null;
+    this.formCropFile = null;
+    this.revokePreview(this.formPhotoPreview);
     this.formPhotoPreview = '';
     this.isProjectFormOpen.set(true);
   }
@@ -69,6 +80,8 @@ export class ProjectListComponent implements OnInit {
     this.formLabel = project.label || project.name || '';
     this.formDescription = project.description || '';
     this.formPhotoFile = null;
+    this.formCropFile = null;
+    this.revokePreview(this.formPhotoPreview);
     this.formPhotoPreview = this.getProjectPhoto(project) || '';
     this.isProjectFormOpen.set(true);
   }
@@ -79,6 +92,8 @@ export class ProjectListComponent implements OnInit {
     this.formLabel = '';
     this.formDescription = '';
     this.formPhotoFile = null;
+    this.formCropFile = null;
+    this.revokePreview(this.formPhotoPreview);
     this.formPhotoPreview = '';
   }
 
@@ -91,18 +106,32 @@ export class ProjectListComponent implements OnInit {
       this.formPhotoPreview = this.editingProject()
         ? this.getProjectPhoto(this.editingProject()!) || ''
         : '';
+      this.formCropFile = null;
       return;
     }
 
     if (!isAllowedImageFile(file)) {
       input.value = '';
       this.formPhotoFile = null;
+      this.formCropFile = null;
       this.errorMessage.set('Upload photo hanya boleh jpg, jpeg, png, webp, atau gif.');
       return;
     }
 
+    input.value = '';
+    this.formCropFile = file;
+    this.errorMessage.set('');
+  }
+
+  cancelProjectPhotoCrop(): void {
+    this.formCropFile = null;
+  }
+
+  applyProjectPhotoCrop(file: File): void {
+    this.revokePreview(this.formPhotoPreview);
     this.formPhotoFile = file;
     this.formPhotoPreview = URL.createObjectURL(file);
+    this.formCropFile = null;
     this.errorMessage.set('');
   }
 
@@ -256,5 +285,11 @@ export class ProjectListComponent implements OnInit {
     }
 
     return formData;
+  }
+
+  private revokePreview(preview: string): void {
+    if (preview.startsWith('blob:')) {
+      URL.revokeObjectURL(preview);
+    }
   }
 }

@@ -7,7 +7,7 @@
       class="rightSection bg-primary-200 relative flex flex-col items-center rounded-3xl justify-between p-8 w-full sm:w-1/2 sm:flex"
     >
       <div class="w-full flex justify-start">
-        <img src="images/ondary-logo-white.png" class="w-28 h-auto" alt="Ondary Logo" />
+        <img src="images/ondary-logo-white.png" class="w-40 h-auto z-10" alt="Ondary Logo" />
       </div>
       <div class="absolute flex items-start -ml-[280px] bottom-0 justify-start w-full">
         <img src="images/loginchar.png" class="w-[700px] h-auto bottom-0" alt="Login Character" />
@@ -41,14 +41,14 @@
         </p>
         <button
           type="submit"
-          class="w-full bg-primary-100 text-white font-semibold py-3 rounded-lg mt-6 shadow-sm transition hover:bg-[#e5e3e0] disabled:cursor-not-allowed disabled:opacity-70"
+          class="w-full bg-primary-100 text-white font-semibold py-3 rounded-lg mt-6 shadow-sm transition hover:bg-[#e5e3e0] hover:text-primary-300 disabled:cursor-not-allowed disabled:opacity-70"
           [disabled]="loading"
         >
           {{ loading ? 'Loading...' : 'Continue' }}
         </button>
-        <div class="text-center mt-1">
+        <!-- <div class="text-center mt-1">
           <a href="#" class="text-tertiary-200 text-sm hover:underline">Forgot Password?</a>
-        </div>
+        </div> -->
       </form>
     </div>
   </div>

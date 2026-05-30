@@ -112,4 +112,12 @@
       </button>
     </div>
   </form>
+
+  <app-image-cropper
+    [visible]="!!photoCropFile"
+    [file]="photoCropFile"
+    title="Crop Member Photo"
+    (cancel)="cancelPhotoCrop()"
+    (cropped)="applyPhotoCrop($event)"
+  ></app-image-cropper>
 </section>

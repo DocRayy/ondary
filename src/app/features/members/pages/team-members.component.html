@@ -38,7 +38,7 @@
       *ngFor="let user of filteredUsers()"
       class="overflow-hidden rounded-xl border border-tertiary-200 bg-tertiary-50"
     >
-      <div class="grid h-[116px] place-items-center overflow-hidden bg-tertiary-200">
+      <div class="grid h-[300px] place-items-center overflow-hidden bg-tertiary-200">
         <img
           *ngIf="getUserPhoto(user) as userPhoto; else userPhotoPlaceholder"
           [src]="userPhoto"
@@ -205,4 +205,12 @@
     (cancel)="closeDeleteDialog()"
     (confirm)="confirmDeleteUser()"
   ></app-confirmation-modal>
+
+  <app-image-cropper
+    [visible]="!!editCropFile"
+    [file]="editCropFile"
+    title="Crop Member Photo"
+    (cancel)="cancelEditPhotoCrop()"
+    (cropped)="applyEditPhotoCrop($event)"
+  ></app-image-cropper>
 </section>

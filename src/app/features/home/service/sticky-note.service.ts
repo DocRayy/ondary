@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '@app/shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 import {
   ApiCollectionResponse,
@@ -36,9 +37,14 @@ export class StickyNoteService {
   }
 
   updateStickyNote(stickyNoteId: number | string, payload: UpdateStickyNoteRequest) {
+    const id = normalizeApiId(stickyNoteId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('sticky note id'));
+    }
+
     return this.http
       .patch<ApiItemResponse<StickyNoteRecord>>(
-        `${this.apiUrl}/sticky-notes/${stickyNoteId}`,
+        `${this.apiUrl}/sticky-notes/${id}`,
         payload,
         {
           headers: this.createAuthHeaders(),
@@ -48,7 +54,12 @@ export class StickyNoteService {
   }
 
   deleteStickyNote(stickyNoteId: number | string) {
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/sticky-notes/${stickyNoteId}`, {
+    const id = normalizeApiId(stickyNoteId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('sticky note id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/sticky-notes/${id}`, {
       headers: this.createAuthHeaders(),
     });
   }

@@ -83,6 +83,10 @@
         </button>
       </div>
 
+      <div #managerChartPanel class="mt-5 h-80 rounded-2xl bg-[#0F172A] p-4">
+        <canvas #managerTaskChart></canvas>
+      </div>
+
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <div class="rounded-2xl bg-[#475569] p-4">
           <div class="flex items-center justify-between text-sm font-bold text-white">
@@ -119,7 +123,7 @@
             {{ loadingSummary() ? '...' : tasksCount() }}
           </p>
         </div>
-        <p class="mt-4 text-sm text-success-600">{{ taskDailyComparisonText() }}</p>
+        <p class="mt-4 text-sm text-success-300">{{ taskDailyComparisonText() }}</p>
       </div>
       <div class="rounded-3xl bg-[#475569] p-2 shadow-sm">
         <div class="flex flex-col items-center justify-between">
@@ -128,7 +132,7 @@
             {{ loadingSummary() ? '...' : todosCount() }}
           </p>
         </div>
-        <div class="mt-4 flex items-center gap-2 text-xs text-tertiary-500">
+        <div class="mt-4 flex items-center gap-2 text-xs text-tertiary-200">
           <span class="h-2 w-2 rounded-full bg-warning-400"></span>
           <span>{{ todosLastUpdateText() }}</span>
         </div>

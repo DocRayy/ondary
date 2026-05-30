@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '@app/shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 import {
   ApiCollectionResponse,
@@ -39,8 +40,13 @@ export class TaskService {
   }
 
   getTask(taskId: number | string) {
+    const id = normalizeApiId(taskId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task id'));
+    }
+
     return this.http
-      .get<ApiItemResponse<TaskRecord>>(`${this.apiUrl}/task/${taskId}`, {
+      .get<ApiItemResponse<TaskRecord>>(`${this.apiUrl}/task/${id}`, {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeItem(response)));
@@ -55,15 +61,25 @@ export class TaskService {
   }
 
   updateTask(taskId: number | string, payload: UpdateTaskRequest) {
+    const id = normalizeApiId(taskId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task id'));
+    }
+
     return this.http
-      .patch<ApiItemResponse<TaskRecord>>(`${this.apiUrl}/task/${taskId}`, payload, {
+      .patch<ApiItemResponse<TaskRecord>>(`${this.apiUrl}/task/${id}`, payload, {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
   deleteTask(taskId: number | string) {
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/task/${taskId}`, {
+    const id = normalizeApiId(taskId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/task/${id}`, {
       headers: this.createAuthHeaders(),
     });
   }

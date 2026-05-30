@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '../../../shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 
 export interface ManagerNoteRecord {
@@ -76,9 +77,14 @@ export class ManagerNoteService {
   }
 
   updateManagerNote(managerNoteId: number | string, payload: UpdateManagerNoteRequest) {
+    const id = normalizeApiId(managerNoteId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('manager note id'));
+    }
+
     return this.http
       .patch<ApiItemResponse<ManagerNoteRecord>>(
-        `${this.apiUrl}/manager-notes/${managerNoteId}`,
+        `${this.apiUrl}/manager-notes/${id}`,
         payload,
         {
           headers: this.createAuthHeaders(),
@@ -88,7 +94,12 @@ export class ManagerNoteService {
   }
 
   deleteManagerNote(managerNoteId: number | string) {
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/manager-notes/${managerNoteId}`, {
+    const id = normalizeApiId(managerNoteId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('manager note id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/manager-notes/${id}`, {
       headers: this.createAuthHeaders(),
     });
   }

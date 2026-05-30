@@ -1,7 +1,8 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '@app/shared/utils/api-id';
 import { environment } from '../../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse, ProjectRecord } from '../schema/project.schema';
 
@@ -30,15 +31,25 @@ export class ProjectService {
   }
 
   updateProject(projectId: number | string, payload: Partial<ProjectRecord> | FormData) {
+    const id = normalizeApiId(projectId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('project id'));
+    }
+
     return this.http
-      .patch<ApiItemResponse<ProjectRecord>>(`${this.apiUrl}/projects/${projectId}`, payload, {
+      .patch<ApiItemResponse<ProjectRecord>>(`${this.apiUrl}/projects/${id}`, payload, {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
   deleteProject(projectId: number | string) {
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/projects/${projectId}`, {
+    const id = normalizeApiId(projectId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('project id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/projects/${id}`, {
       headers: this.createAuthHeaders(),
     });
   }

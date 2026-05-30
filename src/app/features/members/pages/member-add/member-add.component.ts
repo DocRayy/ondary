@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
+import { ImageCropperComponent } from '../../../../shared/components/image-cropper/image-cropper.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { imageAcceptAttribute, isAllowedImageFile } from '../../../../shared/utils/media';
 import { MemberRecord, MemberService } from '../../service/member.service';
@@ -16,7 +17,7 @@ type MemberForm = Required<Pick<MemberRecord, 'username' | 'name' | 'email' | 'p
 @Component({
   selector: 'app-member-add',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, FcIconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FcIconComponent, ImageCropperComponent],
   templateUrl: './member-add.component.html',
 })
 export class MemberAddComponent {
@@ -29,6 +30,8 @@ export class MemberAddComponent {
   forms: MemberForm[] = [this.createForm()];
   isSubmitting = false;
   errorMessage = '';
+  photoCropFile: File | null = null;
+  private photoCropForm: MemberForm | null = null;
 
   addMore(): void {
     this.forms.push(this.createForm());
@@ -39,7 +42,11 @@ export class MemberAddComponent {
       return;
     }
 
-    this.forms.splice(index, 1);
+    const [removedForm] = this.forms.splice(index, 1);
+    this.revokePreview(removedForm.photoPreview);
+    if (this.photoCropForm === removedForm) {
+      this.cancelPhotoCrop();
+    }
   }
 
   submit(): void {
@@ -79,6 +86,7 @@ export class MemberAddComponent {
 
     if (!file) {
       form.photoFile = null;
+      this.revokePreview(form.photoPreview);
       form.photoPreview = '';
       return;
     }
@@ -86,13 +94,35 @@ export class MemberAddComponent {
     if (!isAllowedImageFile(file)) {
       input.value = '';
       form.photoFile = null;
+      this.photoCropFile = null;
+      this.photoCropForm = null;
+      this.revokePreview(form.photoPreview);
       form.photoPreview = '';
       this.errorMessage = 'Upload photo hanya boleh jpg, jpeg, png, webp, atau gif.';
       return;
     }
 
-    form.photoFile = file;
-    form.photoPreview = URL.createObjectURL(file);
+    input.value = '';
+    this.photoCropFile = file;
+    this.photoCropForm = form;
+    this.errorMessage = '';
+  }
+
+  cancelPhotoCrop(): void {
+    this.photoCropFile = null;
+    this.photoCropForm = null;
+  }
+
+  applyPhotoCrop(file: File): void {
+    if (!this.photoCropForm) {
+      return;
+    }
+
+    this.revokePreview(this.photoCropForm.photoPreview);
+    this.photoCropForm.photoFile = file;
+    this.photoCropForm.photoPreview = URL.createObjectURL(file);
+    this.photoCropFile = null;
+    this.photoCropForm = null;
     this.errorMessage = '';
   }
 
@@ -125,5 +155,11 @@ export class MemberAddComponent {
     }
 
     return formData;
+  }
+
+  private revokePreview(preview: string): void {
+    if (preview.startsWith('blob:')) {
+      URL.revokeObjectURL(preview);
+    }
   }
 }
