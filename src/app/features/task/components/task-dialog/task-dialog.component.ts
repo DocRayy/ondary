@@ -33,11 +33,17 @@ import dayjs from 'dayjs';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { FcIconComponent } from '@app/shared/components/fc-icon/fc-icon.component';
 import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
+import { getApiMediaUrl } from '@app/shared/utils/media';
 
 @Component({
   selector: 'app-task-dialog',
   standalone: true,
-  imports: [CommonModule, FormsModule, FcIconComponent, GsapModalDirective],
+  imports: [
+    CommonModule,
+    FormsModule,
+    FcIconComponent,
+    GsapModalDirective,
+  ],
   templateUrl: './task-dialog.component.html',
 })
 export class TaskDialogComponent implements OnInit, OnChanges {
@@ -438,6 +444,10 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     return this.activeTimelogService.isFinishedTaskTodo(todo.id);
   }
 
+  isTodoPausedTimelog(todo: TaskTodoDraft): boolean {
+    return this.activeTimelogService.isPausedTaskTodo(todo.id);
+  }
+
   createTimelogForTodo(todo: TaskTodoDraft): void {
     if (this.isTodoActiveTimelog(todo)) {
       this.activeTimelogService.openEndDialog();
@@ -451,6 +461,24 @@ export class TaskDialogComponent implements OnInit, OnChanges {
 
     if (!this.isCurrentUserTodoAssignee(todo)) {
       this.errorMessage = 'You can only create timelog for your assigned todo.';
+      return;
+    }
+
+    const pausedTimelog = this.activeTimelogService.getPausedTaskTodoTimelog(todo.id);
+    if (pausedTimelog) {
+      this.errorMessage = '';
+      this.creatingTimelogTodoId = todo.id;
+      this.activeTimelogService.continueTimelog(pausedTimelog)?.subscribe({
+        next: (response) => {
+          this.creatingTimelogTodoId = null;
+          this.toastService.success(response);
+        },
+        error: (error) => {
+          this.creatingTimelogTodoId = null;
+          this.errorMessage = this.toastService.getErrorMessage(error, '');
+          this.toastService.errorFrom(error);
+        },
+      });
       return;
     }
 
@@ -540,6 +568,11 @@ export class TaskDialogComponent implements OnInit, OnChanges {
         .slice(0, 1)
         .toUpperCase() || '?'
     );
+  }
+
+  getUserPhoto(user: UserOption | undefined): string {
+    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
+    return getApiMediaUrl(photo) || '';
   }
 
   getTodoAssignableUsers(): UserOption[] {
@@ -664,8 +697,15 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     this.taskService.getProjects().subscribe({
       next: (projects) => {
         this.projects = projects
-          .map((project) => ({ ...project, id: Number(project.id) }))
+          .map((project) => ({
+            ...project,
+            id: Number(project.id),
+            name: project.name || project.label || `Project #${project.id}`,
+          }))
           .filter((project) => Number.isInteger(project.id) && project.id > 0);
+        if (this.task?.project_id) {
+          this.selectedProject = this.createSelectedProject(this.task.project_id);
+        }
         this.isLoadingProjects = false;
       },
       error: () => {
@@ -680,7 +720,11 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     this.taskService.getUsers().subscribe({
       next: (users) => {
         this.users = users
-          .map((user) => ({ ...user, id: Number(user.id) }))
+          .map((user) => ({
+            ...user,
+            id: Number(user.id),
+            username: user.username || user.name || user.email || `User #${user.id}`,
+          }))
           .filter((user) => Number.isInteger(user.id) && user.id > 0);
         this.isLoadingUsers = false;
       },

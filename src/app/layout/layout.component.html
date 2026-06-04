@@ -1,15 +1,15 @@
 <div class="h-dvh overflow-hidden bg-[#2F4156] text-tertiary-50">
-  <div class="flex h-dvh">
+  <div class="flex h-dvh min-w-0">
     <app-sidebar
       #sidebar
       (collapsedChange)="isSidebarCollapsed = $event"
     ></app-sidebar>
-    <div class="flex min-h-dvh flex-1 flex-col">
+    <div class="flex min-h-dvh min-w-0 flex-1 flex-col">
       <app-header
         [isSidebarCollapsed]="isSidebarCollapsed"
         (sidebarToggle)="toggleSidebar()"
       ></app-header>
-      <main class="flex-1 overflow-y-auto bg-[#2F4156] pl-8 pr-0 py-6">
+      <main class="min-w-0 flex-1 overflow-y-auto bg-[#2F4156] px-4 py-4 lg:pl-8 lg:pr-0 lg:py-6">
         <router-outlet></router-outlet>
       </main>
     </div>
@@ -17,7 +17,7 @@
 
   <div
     *ngIf="activeTimelogService.activeTimelog() as activeTimelog"
-    class="fixed bottom-8 left-1/2 z-70 flex -translate-x-1/2 items-center gap-4 rounded-full bg-[#94A3B8] px-4 py-2 text-black shadow-sm"
+    class="fixed bottom-4 left-1/2 z-70 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-full bg-[#94A3B8] px-4 py-2 text-black shadow-sm lg:bottom-8 lg:gap-4"
   >
     <span class="text-base font-bold text-black">{{ activeTimelog.elapsed }}</span>
     <button

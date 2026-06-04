@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import {
   CdkDragDrop,
   DragDropModule,
@@ -22,14 +22,14 @@ import {
   parseTaskIdList,
 } from '../../schema/task.schema';
 import { TaskService } from '../../service/task.service';
-import { TimelogRecord } from '../../../timelog/schema/timelog.schema';
+import { TimelogFileRecord, TimelogRecord } from '../../../timelog/schema/timelog.schema';
 import { TimelogService } from '../../../timelog/service/timelog.service';
-import { environment } from '../../../../../environments/environment';
 import { AuthService } from '../../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../../core/auth/role-permission.service';
 import { UserOption } from '../../schema/task.schema';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { getApiMediaUrl } from '@app/shared/utils/media';
+import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
 
 type ViewType = 'board' | 'timelog' | 'calendar' | 'recap';
 
@@ -39,9 +39,16 @@ interface TaskCard {
   date: string;
   subtask: string;
   progress: number;
-  members: string[];
+  members: TaskCardMember[];
   labels: TaskLabelOption[];
   task: TaskRecord;
+}
+
+interface TaskCardMember {
+  id: number | string;
+  name: string;
+  photo: string;
+  initial: string;
 }
 
 interface TaskColumn {
@@ -85,6 +92,7 @@ interface TimelogTimelineLog {
   lane: number;
   startTime: number;
   endTime: number;
+  files: TimelogFileRecord[];
 }
 
 interface TimelogTimelineUser {
@@ -98,7 +106,14 @@ interface TimelogTimelineUser {
 @Component({
   selector: 'app-task-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, FcIconComponent, TaskDialogComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    DragDropModule,
+    FcIconComponent,
+    TaskDialogComponent,
+    GsapModalDirective,
+  ],
   templateUrl: './task-list.component.html',
 })
 export class TaskListComponent implements OnInit {
@@ -108,22 +123,10 @@ export class TaskListComponent implements OnInit {
   private readonly permission = inject(RolePermissionService);
   private readonly toastService = inject(ToastService);
   private readonly validStatuses = new Set<TaskStatus>(TASK_STATUSES);
-  private readonly apiUrl = environment.API_URL;
   private readonly timelineStartHour = 7;
   private readonly timelineEndHour = 24;
   private suppressBoardCardClick = false;
 
-  readonly displayName = computed(() => {
-    const user = this.authService.getUser();
-    return user?.username || user?.name || 'User';
-  });
-
-  readonly userPhoto = computed(() => {
-    const user = this.authService.getUser();
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
-    return getApiMediaUrl(photo) || '';
-  });
-  
   readonly viewTabs = [
     { label: 'Board', value: 'board' },
     { label: 'Timelog', value: 'timelog' },
@@ -204,6 +207,7 @@ export class TaskListComponent implements OnInit {
   timelogUsers: TimelogTimelineUser[] = [];
   isLoadingTimelogs = false;
   timelogErrorMessage = '';
+  previewImage: { src: string; alt: string } | null = null;
 
   readonly calendarWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   readonly monthNames = [
@@ -455,8 +459,8 @@ export class TaskListComponent implements OnInit {
     return label.id ?? label.name ?? index;
   }
 
-  trackMemberByInitial(_: number, member: string): string {
-    return member;
+  trackMemberById(_: number, member: TaskCardMember): number | string {
+    return member.id;
   }
 
   trackTimelogUserById(index: number, user: TimelogTimelineUser): number | string {
@@ -469,6 +473,26 @@ export class TaskListComponent implements OnInit {
 
   trackTimeSlotByValue(_: number, time: string): string {
     return time;
+  }
+
+  trackTimelogFileById(index: number, file: TimelogFileRecord): number | string {
+    return file.id ?? file.photo ?? index;
+  }
+
+  getTimelogFilePhoto(file: TimelogFileRecord): string | null {
+    return getApiMediaUrl(file.photo);
+  }
+
+  openImagePreview(src: string | null, alt = 'Timelog attachment'): void {
+    if (!src) {
+      return;
+    }
+
+    this.previewImage = { src, alt };
+  }
+
+  closeImagePreview(): void {
+    this.previewImage = null;
   }
 
   getTimelinePosition(index: number): number {
@@ -638,7 +662,7 @@ export class TaskListComponent implements OnInit {
       date: this.formatTaskDate(task.due_date),
       subtask: `${completedTodos}/${todos.length}`,
       progress,
-      members: this.getTaskMemberInitials(task),
+      members: this.getTaskMembers(task),
       labels: this.getTaskLabels(task),
       task,
     };
@@ -731,29 +755,49 @@ export class TaskListComponent implements OnInit {
     return this.validStatuses.has(normalized) ? normalized : 'draft';
   }
 
-  private getTaskMemberInitials(task: TaskRecord): string[] {
+  private getTaskMembers(task: TaskRecord): TaskCardMember[] {
     const taskUsers = getTaskUsers(task);
     if (taskUsers.length) {
-      return taskUsers.map((user) =>
-        this.getUserInitial(user?.name || user?.username || user?.email || user?.id),
-      );
+      return taskUsers.map((user) => this.mapUserToTaskMember(user));
     }
 
     const assigneeIds = getTaskUserIds(task);
     if (assigneeIds.length) {
-      return assigneeIds.map((id) => this.getUserInitial(id));
+      return assigneeIds.map((id) => this.createFallbackTaskMember(id));
     }
 
-    return [this.getUserInitial(task.user_id)];
+    return [this.createFallbackTaskMember(task.user_id)];
   }
 
-  private getUserInitial(value: number | string | undefined): string {
-    return (
-      String(value ?? '?')
-        .trim()
-        .slice(0, 1)
-        .toUpperCase() || '?'
-    );
+  private mapUserToTaskMember(user: UserOption): TaskCardMember {
+    const name = user.name || user.username || user.email || `User #${user.id}`;
+
+    return {
+      id: user.id,
+      name,
+      photo: this.getUserPhoto(user),
+      initial: this.getInitial(name),
+    };
+  }
+
+  private createFallbackTaskMember(value: number | string | undefined): TaskCardMember {
+    const label = `User #${value ?? '-'}`;
+
+    return {
+      id: value ?? label,
+      name: label,
+      photo: '',
+      initial: this.getInitial(value),
+    };
+  }
+
+  private getInitial(value: number | string | undefined): string {
+    return String(value ?? '?').trim().slice(0, 1).toUpperCase() || '?';
+  }
+
+  private getUserPhoto(user: UserOption | undefined): string {
+    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
+    return getApiMediaUrl(photo) || '';
   }
 
   private getTaskTodos(task: TaskRecord): TaskTodoRecord[] {
@@ -914,6 +958,7 @@ export class TaskListComponent implements OnInit {
       lane: 0,
       startTime,
       endTime,
+      files: this.getTimelogFiles(record),
     };
   }
 
@@ -994,6 +1039,18 @@ export class TaskListComponent implements OnInit {
     return status === 'active' || !record.end ? 'Active' : 'Completed';
   }
 
+  private getTimelogFiles(record: TimelogRecord): TimelogFileRecord[] {
+    if (Array.isArray(record.files)) {
+      return record.files;
+    }
+
+    if (Array.isArray(record.timelog_file)) {
+      return record.timelog_file;
+    }
+
+    return [];
+  }
+
   private calculateMinuteDiff(start?: string, end?: string): number {
     const startDate = this.parseDate(start);
     const endDate = this.parseDate(end);
@@ -1033,15 +1090,7 @@ export class TaskListComponent implements OnInit {
       | undefined;
     const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
 
-    if (!photo) {
-      return 'images/home-user.png';
-    }
-
-    if (/^https?:\/\//i.test(photo) || photo.startsWith('/')) {
-      return photo;
-    }
-
-    return `${this.apiUrl}/${photo.replace(/^\/+/, '')}`;
+    return getApiMediaUrl(photo) || 'images/home-user.png';
   }
 
   private parseDate(value?: string): Date | null {

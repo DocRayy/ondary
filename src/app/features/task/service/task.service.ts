@@ -25,11 +25,17 @@ export class TaskService {
   private readonly authService = inject(AuthService);
   private readonly apiUrl = environment.API_URL;
 
-  getTasks(userId?: number | string) {
-    const params =
-      userId !== undefined && userId !== null && String(userId).trim()
-        ? new HttpParams().set('user_id', String(userId))
-        : undefined;
+  getTasks(
+    userId?: number | string,
+    filters: { month?: number | string; year?: number | string } = {},
+  ) {
+    let params = new HttpParams();
+
+    if (userId !== undefined && userId !== null && String(userId).trim()) {
+      params = params.set('user_id', String(userId));
+    }
+
+    params = this.appendDateFilters(params, filters);
 
     return this.http
       .get<ApiCollectionResponse<TaskRecord>>(`${this.apiUrl}/task`, {
@@ -92,10 +98,11 @@ export class TaskService {
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
-  getTaskTodos() {
+  getTaskTodos(filters: { month?: number | string; year?: number | string } = {}) {
     return this.http
       .get<ApiCollectionResponse<TaskTodoRecord>>(`${this.apiUrl}/task-todos`, {
         headers: this.createAuthHeaders(),
+        params: this.appendDateFilters(new HttpParams(), filters),
       })
       .pipe(map((response) => this.normalizeCollection(response)));
   }
@@ -223,6 +230,21 @@ export class TaskService {
     }
 
     return 'data' in response || 'item' in response || 'result' in response;
+  }
+
+  private appendDateFilters(
+    params: HttpParams,
+    filters: { month?: number | string; year?: number | string },
+  ): HttpParams {
+    if (filters.month !== undefined && filters.month !== null && String(filters.month).trim()) {
+      params = params.set('month', String(filters.month));
+    }
+
+    if (filters.year !== undefined && filters.year !== null && String(filters.year).trim()) {
+      params = params.set('year', String(filters.year));
+    }
+
+    return params;
   }
 
   private createAuthHeaders(): HttpHeaders {

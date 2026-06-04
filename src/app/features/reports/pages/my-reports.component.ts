@@ -4,7 +4,7 @@ import { forkJoin } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../core/auth/role-permission.service';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
-import { TaskRecord, TaskTodoRecord } from '../../task/schema/task.schema';
+import { ProjectOption, TaskRecord, TaskTodoRecord } from '../../task/schema/task.schema';
 import { TaskService } from '../../task/service/task.service';
 import { TimelogRecord } from '../../timelog/schema/timelog.schema';
 import { TimelogService } from '../../timelog/service/timelog.service';
@@ -33,11 +33,18 @@ export class MyReportsComponent implements OnInit {
   private readonly permission = inject(RolePermissionService);
   private readonly taskService = inject(TaskService);
   private readonly timelogService = inject(TimelogService);
+  private readonly currentYear = new Date().getFullYear();
 
-  readonly selectedMonth = signal(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  readonly selectedMonth = signal(new Date(this.currentYear, new Date().getMonth(), 1));
+  readonly selectedYear = signal(this.currentYear);
+  readonly yearOptions = Array.from(
+    { length: this.currentYear - 2020 + 1 },
+    (_, index) => 2020 + index,
+  );
   readonly tasks = signal<TaskRecord[]>([]);
   readonly taskTodos = signal<TaskTodoRecord[]>([]);
   readonly timelogs = signal<TimelogRecord[]>([]);
+  readonly projects = signal<ProjectOption[]>([]);
   readonly reportRows = signal<ReportRow[]>([]);
   readonly isLoading = signal(false);
   readonly isGeneratingPdf = signal(false);
@@ -64,7 +71,11 @@ export class MyReportsComponent implements OnInit {
     return ids.size;
   });
   readonly totalCompleted = computed(
-    () => this.reportRows().reduce((sum, row) => sum + Number(row.completed || 0), 0),
+    () =>
+      this.reportRows().reduce(
+        (sum, row) => sum + (row.completed || this.isCompletedStatus(row.status) ? 1 : 0),
+        0,
+      ),
   );
 
   ngOnInit(): void {
@@ -73,13 +84,28 @@ export class MyReportsComponent implements OnInit {
 
   previousMonth(): void {
     const month = this.selectedMonth();
-    this.selectedMonth.set(new Date(month.getFullYear(), month.getMonth() - 1, 1));
+    const nextMonth = new Date(this.selectedYear(), month.getMonth() - 1, 1);
+    this.selectedMonth.set(nextMonth);
+    this.selectedYear.set(nextMonth.getFullYear());
     this.loadReportData();
   }
 
   nextMonth(): void {
     const month = this.selectedMonth();
-    this.selectedMonth.set(new Date(month.getFullYear(), month.getMonth() + 1, 1));
+    const nextMonth = new Date(this.selectedYear(), month.getMonth() + 1, 1);
+    this.selectedMonth.set(nextMonth);
+    this.selectedYear.set(nextMonth.getFullYear());
+    this.loadReportData();
+  }
+
+  changeYear(event: Event): void {
+    const year = Number((event.target as HTMLSelectElement).value);
+    if (!Number.isInteger(year)) {
+      return;
+    }
+
+    this.selectedYear.set(year);
+    this.selectedMonth.set(new Date(year, this.selectedMonth().getMonth(), 1));
     this.loadReportData();
   }
 
@@ -90,7 +116,7 @@ export class MyReportsComponent implements OnInit {
 
     const selectedMonth = this.selectedMonth();
     const month = selectedMonth.getMonth() + 1;
-    const year = selectedMonth.getFullYear();
+    const year = this.selectedYear();
 
     this.isGeneratingPdf.set(true);
     this.errorMessage.set('');
@@ -132,7 +158,10 @@ export class MyReportsComponent implements OnInit {
   }
 
   getGroupLabel(row: ReportRow): string {
-    return `Week ${row.groupWeek} - ${row.groupDay}`;
+    const groupWeek = row.groupWeek === undefined || row.groupWeek === null || row.groupWeek === ''
+      ? 1
+      : row.groupWeek;
+    return `Week ${groupWeek} - ${row.groupDay || 'Unknown date'}`;
   }
 
   formatMinutes(minutes: number): string {
@@ -163,16 +192,19 @@ export class MyReportsComponent implements OnInit {
   private loadReportData(): void {
     this.isLoading.set(true);
     this.errorMessage.set('');
+    const filters = this.getSelectedReportFilters();
 
     forkJoin({
-      tasks: this.taskService.getTasks(this.selectedUserId() ?? undefined),
-      taskTodos: this.taskService.getTaskTodos(),
-      timelogs: this.timelogService.getTimelogs(),
+      tasks: this.taskService.getTasks(this.selectedUserId() ?? undefined, filters),
+      taskTodos: this.taskService.getTaskTodos(filters),
+      timelogs: this.timelogService.getTimelogs(filters),
+      projects: this.taskService.getProjects(),
     }).subscribe({
-      next: ({ tasks, taskTodos, timelogs }) => {
+      next: ({ tasks, taskTodos, timelogs, projects }) => {
         this.tasks.set(tasks);
         this.taskTodos.set(taskTodos);
         this.timelogs.set(timelogs);
+        this.projects.set(projects);
         this.reportRows.set(this.buildRows());
         this.isLoading.set(false);
       },
@@ -187,21 +219,22 @@ export class MyReportsComponent implements OnInit {
   private buildRows(): ReportRow[] {
     const rows = new Map<string, ReportRow>();
 
-    this.filteredTodos().forEach((todo) => {
+    this.getAllTodos().filter((todo) => this.shouldIncludeTodo(todo)).forEach((todo) => {
       const task = todo.task || this.findTask(todo.task_id);
       const key = String(todo.id ?? `${todo.task_id ?? 'task'}-${todo.label ?? 'todo'}`);
+      const createdAt = this.getReportDateValue(todo, task);
 
       rows.set(key, {
         assignee: this.getUserName(todo.user, todo.user_id ?? task?.user_id),
         todo: todo.label || `Todo #${todo.id ?? '-'}`,
         status: todo.status || 'pending',
         created: 1,
-        completed: todo.status === 'completed' || Number(todo.progress || 0) >= 100 ? 1 : 0,
+        completed: this.isTodoCompleted(todo) ? 1 : 0,
         project: this.getTaskTodoProject(todo, task),
         timeSpendMinutes: this.getReportNumberField(todo, 'timeSpendMinutes'),
-        createdAt: this.getReportStringField(todo, 'createdAt') || todo.created_at || '',
-        groupWeek: this.getReportGroupWeek(todo),
-        groupDay: this.getReportGroupDay(todo),
+        createdAt,
+        groupWeek: this.getReportGroupWeek(todo, createdAt),
+        groupDay: this.getReportGroupDay(todo, createdAt),
       });
     });
 
@@ -209,6 +242,7 @@ export class MyReportsComponent implements OnInit {
       const taskTodo = timelog.task_todo;
       const task = taskTodo?.task || this.findTask(taskTodo?.task_id);
       const key = String(timelog.task_todo_id ?? taskTodo?.id ?? `timelog-${timelog.id ?? ''}`);
+      const createdAt = this.getReportDateValue(timelog, taskTodo, task);
       const current =
         rows.get(key) ||
         ({
@@ -219,30 +253,68 @@ export class MyReportsComponent implements OnInit {
           completed: 0,
           project: this.getTaskTodoProject(taskTodo, task),
           timeSpendMinutes: 0,
-          createdAt: this.getReportStringField(taskTodo, 'created_at'),
-          groupWeek: this.getReportGroupWeek(taskTodo),
-          groupDay: this.getReportGroupDay(taskTodo),
+          createdAt,
+          groupWeek: this.getReportGroupWeek(timelog, createdAt),
+          groupDay: this.getReportGroupDay(timelog, createdAt),
         } as ReportRow);
+      const isTimelogCompleted = this.isCompletedStatus(timelog.status);
+      const nextStatus = isTimelogCompleted && !this.isCompletedStatus(current.status)
+        ? timelog.status || current.status
+        : current.status;
 
       rows.set(key, {
         ...current,
+        status: nextStatus,
+        completed: current.completed || isTimelogCompleted ? 1 : 0,
+        project:
+          current.project && current.project !== '-'
+            ? current.project
+            : this.getTaskTodoProject(taskTodo, task),
+        createdAt: current.createdAt || createdAt,
+        groupWeek: current.groupWeek || this.getReportGroupWeek(timelog, createdAt),
+        groupDay: current.groupDay || this.getReportGroupDay(timelog, createdAt),
         timeSpendMinutes:
           current.timeSpendMinutes +
           Number(timelog.minuted_logged ?? this.calculateMinuteDiff(timelog.start, timelog.end)),
       });
     });
 
-    return Array.from(rows.values());
+    return Array.from(rows.values()).sort((first, second) => {
+      const firstTime = this.parseDate(first.createdAt)?.getTime() ?? 0;
+      const secondTime = this.parseDate(second.createdAt)?.getTime() ?? 0;
+      return firstTime - secondTime;
+    });
   }
 
-  private filteredTodos(): TaskTodoRecord[] {
-    return this.taskTodos().filter((todo) => {
-      const task = todo.task || this.findTask(todo.task_id);
-      return (
-        this.isInSelectedMonth(todo.created_at || task?.due_date || task?.created_at) &&
-        this.matchesSelectedUser(todo.user_id ?? task?.user_id)
-      );
+  private getAllTodos(): TaskTodoRecord[] {
+    const todos = new Map<string, TaskTodoRecord>();
+
+    const addTodo = (todo: TaskTodoRecord, task?: TaskRecord) => {
+      const key = String(todo.id ?? `${todo.task_id ?? task?.id ?? 'task'}-${todo.label ?? 'todo'}`);
+      const taskId = todo.task_id ?? task?.id;
+      const normalizedTaskId = Number(taskId);
+      todos.set(key, {
+        ...todo,
+        task: todo.task || task,
+        task_id: Number.isFinite(normalizedTaskId) ? normalizedTaskId : undefined,
+      });
+    };
+
+    this.taskTodos().forEach((todo) => addTodo(todo));
+    this.tasks().forEach((task) => {
+      const nestedTodos = task.task_todos || task.taskTodos || task.todos || [];
+      nestedTodos.forEach((todo) => addTodo(todo, task));
     });
+
+    return Array.from(todos.values());
+  }
+
+  private shouldIncludeTodo(todo: TaskTodoRecord): boolean {
+    const task = todo.task || this.findTask(todo.task_id);
+    return (
+      this.isInSelectedMonth(this.getReportDateValue(todo, task)) &&
+      this.matchesSelectedUser(todo.user_id ?? task?.user_id)
+    );
   }
 
   private filteredTimelogs(): TimelogRecord[] {
@@ -261,7 +333,16 @@ export class MyReportsComponent implements OnInit {
     todo: unknown,
     task: unknown,
   ): string {
-    return this.getProjectLabelFromTask(this.getReportField(todo, 'task')) || this.getProjectLabelFromTask(task) || '-';
+    return (
+      this.getProjectLabel(this.getReportField(todo, 'project')) ||
+      this.getReportStringField(todo, 'project') ||
+      this.getProjectLabelFromTask(this.getReportField(todo, 'task')) ||
+      this.getProjectLabelFromTask(task) ||
+      this.getProjectLabelById(this.getReportField(todo, 'project_id')) ||
+      this.getProjectLabelById(this.getReportField(this.getReportField(todo, 'task'), 'project_id')) ||
+      this.getProjectLabelById(this.getReportField(task, 'project_id')) ||
+      '-'
+    );
   }
 
   private getUserName(
@@ -271,13 +352,21 @@ export class MyReportsComponent implements OnInit {
     return user?.name || user?.username || user?.email || `User #${userId ?? '-'}`;
   }
 
-  private getReportGroupWeek(todo: unknown): number | string {
-    const value = this.getReportField(todo, 'groupWeek');
-    return value === undefined || value === null || value === '' ? '-' : (value as number | string);
+  private getReportGroupWeek(source: unknown, fallbackDate?: string): number | string {
+    const value = this.getReportField(source, 'groupWeek');
+    if (value !== undefined && value !== null && value !== '') {
+      return value as number | string;
+    }
+
+    const date = this.parseDate(fallbackDate || this.getReportDateValue(source));
+    return date ? Math.ceil(date.getDate() / 7) : 1;
   }
 
-  private getReportGroupDay(todo: unknown): string {
-    return this.getReportStringField(todo, 'groupDay') || this.formatGroupDayFromCreatedAt(todo);
+  private getReportGroupDay(source: unknown, fallbackDate?: string): string {
+    return (
+      this.getReportStringField(source, 'groupDay') ||
+      this.formatGroupDay(fallbackDate || this.getReportDateValue(source))
+    );
   }
 
   private getReportNumberField(source: unknown, key: string): number {
@@ -298,18 +387,53 @@ export class MyReportsComponent implements OnInit {
   }
 
   private getProjectLabelFromTask(task: unknown): string {
-    const project = this.getReportField(task, 'project');
-    const label = this.getReportStringField(project, 'label');
-    return label || '';
+    return this.getProjectLabel(this.getReportField(task, 'project'));
   }
 
-  private formatGroupDayFromCreatedAt(source: unknown): string {
-    const createdAt =
-      this.getReportStringField(source, 'createdAt') ||
-      this.getReportStringField(source, 'created_at');
-    const date = this.parseDate(createdAt);
+  private getProjectLabelById(projectId: unknown): string {
+    const id = Number(projectId);
+    if (!Number.isInteger(id) || id <= 0) {
+      return '';
+    }
+
+    const project = this.projects().find((item) => Number(item.id) === id);
+    return project ? this.getProjectLabel(project) : '';
+  }
+
+  private getProjectLabel(project: unknown): string {
+    if (typeof project === 'string') {
+      return project;
+    }
+
+    return (
+      this.getReportStringField(project, 'label') ||
+      this.getReportStringField(project, 'title') ||
+      this.getReportStringField(project, 'name')
+    );
+  }
+
+  private getReportDateValue(...sources: unknown[]): string {
+    for (const source of sources) {
+      const value =
+        this.getReportStringField(source, 'start') ||
+        this.getReportStringField(source, 'end') ||
+        this.getReportStringField(source, 'created_at') ||
+        this.getReportStringField(source, 'createdAt') ||
+        this.getReportStringField(source, 'updated_at') ||
+        this.getReportStringField(source, 'updatedAt');
+
+      if (value) {
+        return value;
+      }
+    }
+
+    return '';
+  }
+
+  private formatGroupDay(value?: string): string {
+    const date = this.parseDate(value);
     if (!date) {
-      return '-';
+      return 'Unknown date';
     }
 
     return new Intl.DateTimeFormat('en-GB', {
@@ -323,7 +447,7 @@ export class MyReportsComponent implements OnInit {
     const date = this.parseDate(value);
     const month = this.selectedMonth();
     return Boolean(
-      date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth(),
+      date && date.getFullYear() === this.selectedYear() && date.getMonth() === month.getMonth(),
     );
   }
 
@@ -339,6 +463,22 @@ export class MyReportsComponent implements OnInit {
 
   private getGroupKey(row: ReportRow): string {
     return `${row.groupWeek}-${row.groupDay}`;
+  }
+
+  private isTodoCompleted(todo: TaskTodoRecord): boolean {
+    return this.isCompletedStatus(todo.status) || Number(todo.progress || 0) >= 100;
+  }
+
+  private isCompletedStatus(status?: string): boolean {
+    const normalizedStatus = String(status || '').toLowerCase();
+    return normalizedStatus === 'finish' || normalizedStatus === 'finished' || normalizedStatus === 'completed';
+  }
+
+  private getSelectedReportFilters(): { month: number; year: number } {
+    return {
+      month: this.selectedMonth().getMonth() + 1,
+      year: this.selectedYear(),
+    };
   }
 
   private parseDate(value?: string): Date | null {

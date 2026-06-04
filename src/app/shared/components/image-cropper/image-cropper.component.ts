@@ -27,7 +27,7 @@ import { GsapModalDirective } from '../../directives/gsap-modal.directive';
       (click)="cancelCrop()"
     >
       <section
-        class="w-[min(520px,calc(100vw-32px))] rounded-xl bg-white p-5 text-black shadow-2xl"
+        class="max-h-[calc(100vh-32px)] w-[min(520px,calc(100vw-32px))] overflow-y-auto rounded-xl bg-white p-5 text-black shadow-2xl"
         role="dialog"
         aria-modal="true"
         (click)="$event.stopPropagation()"
@@ -91,7 +91,7 @@ import { GsapModalDirective } from '../../directives/gsap-modal.directive';
           />
         </label>
 
-        <div class="mt-5 flex justify-end gap-3">
+        <div class="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
           <button
             type="button"
             class="h-10 rounded-md bg-neutral-100 px-5 text-xs font-bold text-black transition hover:bg-neutral-200"

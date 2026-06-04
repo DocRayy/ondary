@@ -1,4 +1,4 @@
-<section class="space-y-7 pr-8 text-white">
+<section class="space-y-7 pr-0 text-white lg:pr-8">
   <div class="flex flex-col gap-5 lg:flex-row lg:items-end">
     <div>
       <h1 class="text-3xl font-extrabold tracking-normal text-white">My Reports</h1>
@@ -7,7 +7,7 @@
       </p>
     </div>
 
-    <div class="ml-auto flex items-center gap-3">
+    <div class="ml-0 flex w-full items-center gap-3 sm:ml-auto sm:w-auto">
       <button
         type="button"
         class="grid h-14 w-14 place-items-center rounded-2xl bg-white text-primary-950 shadow-sm transition hover:bg-tertiary-200"
@@ -17,7 +17,7 @@
         <fc-icon icon="previous-linear" class="text-xl"></fc-icon>
       </button>
       <div
-        class="grid h-14 min-w-48 place-items-center rounded-2xl bg-white px-7 text-base font-extrabold text-primary-950 shadow-sm"
+        class="grid h-14 min-w-0 flex-1 place-items-center rounded-2xl bg-white px-4 text-base font-extrabold text-primary-950 shadow-sm sm:min-w-48 sm:flex-none sm:px-7"
       >
         {{ monthLabel() }}
       </div>
@@ -29,6 +29,20 @@
       >
         <fc-icon icon="next-linear" class="text-xl"></fc-icon>
       </button>
+      <select
+        class="h-14 rounded-2xl bg-white px-4 text-base font-extrabold text-primary-950 shadow-sm outline-none transition hover:bg-tertiary-200"
+        [value]="selectedYear()"
+        (change)="changeYear($event)"
+        aria-label="Select year"
+      >
+        <option
+          *ngFor="let year of yearOptions"
+          [value]="year"
+          [selected]="year === selectedYear()"
+        >
+          {{ year }}
+        </option>
+      </select>
     </div>
   </div>
 
@@ -48,14 +62,14 @@
 
   <div class="grid gap-6 xl:grid-cols-[1.35fr_0.9fr_1.2fr]">
     <article
-      class="flex min-h-56 items-center gap-8 rounded-2xl bg-primary-800/75 px-8 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
+      class="flex min-h-56 flex-col items-start gap-6 rounded-2xl bg-primary-800/75 px-6 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5 sm:flex-row sm:items-center sm:gap-8 sm:px-8"
     >
-      <div class="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-[#31445F]">
+      <div class="grid h-24 w-24 shrink-0 place-items-center rounded-xl bg-[#31445F] sm:h-32 sm:w-32">
         <fc-icon icon="clock-linear" class="text-7xl text-white"></fc-icon>
       </div>
       <div>
         <p class="text-base font-extrabold text-white">Total Time Spend</p>
-        <p class="mt-6 text-4xl font-extrabold leading-none text-white">
+        <p class="mt-6 break-all text-4xl font-extrabold leading-none text-white">
           {{ formatMinutes(totalMinutes()) }}
         </p>
         <p class="mt-4 text-sm font-medium italic text-white/90">
@@ -70,7 +84,7 @@
       <div class="grid h-full content-center">
         <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 border-b border-white/10 py-3">
           <span
-            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 text-base font-extrabold text-white"
+            class="grid h-11 w-11 place-items-center rounded-full bg-linear-to-br from-indigo-400 to-indigo-700 text-base font-extrabold text-white"
           >
             {{ totalTodos() }}
           </span>
@@ -79,7 +93,7 @@
         </div>
         <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 border-b border-white/10 py-3">
           <span
-            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-blue-700 text-base font-extrabold text-white"
+            class="grid h-11 w-11 place-items-center rounded-full bg-linear-to-br from-sky-400 to-blue-700 text-base font-extrabold text-white"
           >
             {{ totalProjects() }}
           </span>
@@ -88,7 +102,7 @@
         </div>
         <div class="grid grid-cols-[54px_1fr_24px] items-center gap-4 py-3">
           <span
-            class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-green-400 to-emerald-700 text-base font-extrabold text-white"
+            class="grid h-11 w-11 place-items-center rounded-full bg-linear-to-br from-green-400 to-emerald-700 text-base font-extrabold text-white"
           >
             {{ totalCompleted() }}
           </span>
@@ -101,13 +115,13 @@
     <article
       class="grid min-h-56 content-center gap-8 rounded-2xl bg-primary-800/75 px-8 py-7 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/5"
     >
-      <div class="flex items-center justify-center gap-8">
+      <div class="flex flex-col items-center justify-center gap-6 sm:flex-row sm:gap-8">
         <div
-          class="grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-indigo-300 to-indigo-700"
+          class="grid h-24 w-24 place-items-center rounded-full bg-indigo-700"
         >
           <fc-icon icon="badge-linear" class="text-6xl text-white"></fc-icon>
         </div>
-        <p class="text-3xl font-extrabold leading-tight text-white">
+        <p class="text-center text-3xl font-extrabold leading-tight text-white sm:text-left">
           Excellent<br />Work
         </p>
       </div>
@@ -169,13 +183,6 @@
           <span class="truncate">{{ row.project || '-' }}</span>
           <span>{{ formatMinutes(row.timeSpendMinutes) }}</span>
           <span class="truncate">{{ formatCreatedAt(row.createdAt) }}</span>
-          <button
-            type="button"
-            class="grid h-9 w-9 place-items-center rounded-lg text-white/80 transition hover:bg-white/10 hover:text-white"
-            aria-label="Report actions"
-          >
-            <fc-icon icon="dots-v-linear" class="text-2xl"></fc-icon>
-          </button>
         </div>
       </ng-container>
 

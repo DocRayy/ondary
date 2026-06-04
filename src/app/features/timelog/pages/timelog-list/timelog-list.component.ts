@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { AuthService } from '../../../../core/auth/auth.service';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
+import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
 import { getApiMediaUrl } from '../../../../shared/utils/media';
 import {
   CreateTimelogRequest,
@@ -37,7 +38,12 @@ interface ActiveTimelog {
 @Component({
   selector: 'app-timelog-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, FcIconComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    FcIconComponent,
+    GsapModalDirective,
+  ],
   templateUrl: './timelog-list.component.html',
 })
 export class TimelogListComponent implements OnInit, OnDestroy {
@@ -51,6 +57,8 @@ export class TimelogListComponent implements OnInit, OnDestroy {
   isLoading = false;
   isCreating = false;
   isEnding = false;
+  continuingTimelogId: number | string | null = null;
+  previewImage: { src: string; alt: string } | null = null;
   errorMessage = '';
   createForm = {
     name: '',
@@ -148,6 +156,72 @@ export class TimelogListComponent implements OnInit, OnDestroy {
     });
   }
 
+  canContinueTimelog(item: TimelogItem): boolean {
+    return this.isPausedTimelogOwner(item) && !this.activeTimelog;
+  }
+
+  isPausedTimelogOwner(item: TimelogItem): boolean {
+    const currentUserId = this.getCurrentUserId();
+    const timelogUserId = this.getTimelogOwnerId(item.record);
+
+    return (
+      this.isPausedStatus(item.record.status) &&
+      Boolean(item.record.id) &&
+      currentUserId !== null &&
+      timelogUserId !== null &&
+      currentUserId === timelogUserId
+    );
+  }
+
+  continueTimelog(item: TimelogItem): void {
+    if (!this.canContinueTimelog(item) || !item.record.id) {
+      return;
+    }
+
+    this.errorMessage = '';
+    this.continuingTimelogId = item.record.id;
+    const request = this.activeTimelogService.continueTimelog(item.record);
+    if (!request) {
+      this.continuingTimelogId = null;
+      return;
+    }
+
+    request.subscribe({
+      next: (response) => {
+        this.continuingTimelogId = null;
+        this.activeTimelog = {
+          record: {
+            ...item.record,
+            ...response,
+            status: 'active',
+            start: response.start || item.record.start,
+            end: undefined,
+          },
+          elapsed: this.formatElapsed(response.start || item.record.start),
+        };
+        this.loadTimelogs();
+        this.toastService.success(response);
+      },
+      error: (error) => {
+        this.continuingTimelogId = null;
+        this.errorMessage = this.toastService.getErrorMessage(error, '');
+        this.toastService.errorFrom(error);
+      },
+    });
+  }
+
+  openImagePreview(src: string | null, alt = 'Timelog attachment'): void {
+    if (!src) {
+      return;
+    }
+
+    this.previewImage = { src, alt };
+  }
+
+  closeImagePreview(): void {
+    this.previewImage = null;
+  }
+
   private loadTimelogs(): void {
     this.isLoading = true;
     this.errorMessage = '';
@@ -170,17 +244,15 @@ export class TimelogListComponent implements OnInit, OnDestroy {
   }
 
   private syncActiveTimelog(records: TimelogRecord[]): void {
-    if (this.activeTimelog) {
-      return;
-    }
-
     const currentUserId = this.authService.getUser()?.id;
     const activeRecord = records.find(
       (record) =>
-        !record.end && (!currentUserId || Number(record.user_id) === Number(currentUserId)),
+        (record.status || '').toLowerCase().trim() === 'active' &&
+        (!currentUserId || Number(record.user_id) === Number(currentUserId)),
     );
 
     if (!activeRecord) {
+      this.activeTimelog = null;
       return;
     }
 
@@ -191,6 +263,7 @@ export class TimelogListComponent implements OnInit, OnDestroy {
   }
 
   private mapTimelog(record: TimelogRecord): TimelogItem {
+    const isActive = this.isActiveStatus(record.status);
     const durationMinutes =
       record.minuted_logged ??
       (record.end ? this.calculateMinuteDiff(record.start, record.end) : 0);
@@ -202,8 +275,8 @@ export class TimelogListComponent implements OnInit, OnDestroy {
       userPhoto: this.getTimelogUserPhoto(record),
       displayName: this.getTimelogUserName(record),
       startTime: this.formatTime(record.start),
-      endTime: record.end ? this.formatTime(record.end) : '-',
-      duration: record.end ? this.formatMinutes(durationMinutes) : this.formatElapsed(record.start),
+      endTime: isActive || !record.end ? '-' : this.formatTime(record.end),
+      duration: isActive || !record.end ? this.formatElapsed(record.start) : this.formatMinutes(durationMinutes),
       status: this.getTimelogStatusLabel(record),
       files: this.getTimelogFiles(record),
       attachments: this.getTimelogFiles(record).length,
@@ -238,12 +311,18 @@ export class TimelogListComponent implements OnInit, OnDestroy {
   }
 
   private getTimelogStatusLabel(record: TimelogRecord): string {
-    if (record.status === 'finish') {
+    const status = (record.status || '').toLowerCase().trim();
+
+    if (status === 'finish' || status === 'finished') {
       return 'Finished';
     }
 
-    if (record.status === 'pause') {
+    if (this.isPausedStatus(record.status)) {
       return 'Paused';
+    }
+
+    if (this.isActiveStatus(record.status)) {
+      return 'Active';
     }
 
     return record.end ? 'Completed' : 'Active';
@@ -323,6 +402,25 @@ export class TimelogListComponent implements OnInit, OnDestroy {
     const source = record.start || record.created_at || record.updated_at;
     const date = source ? new Date(source) : null;
     return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+  }
+
+  private isPausedStatus(status: string | undefined): boolean {
+    const normalized = (status || '').toLowerCase().trim();
+    return normalized === 'pause' || normalized === 'paused';
+  }
+
+  private isActiveStatus(status: string | undefined): boolean {
+    return (status || '').toLowerCase().trim() === 'active';
+  }
+
+  private getCurrentUserId(): number | null {
+    const id = Number(this.authService.getUser()?.id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }
+
+  private getTimelogOwnerId(record: TimelogRecord): number | null {
+    const id = Number(record.user?.id ?? record.user_id);
+    return Number.isInteger(id) && id > 0 ? id : null;
   }
 
   private resetCreateForm(): void {

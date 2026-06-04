@@ -1,10 +1,10 @@
 <section class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
   <div class="space-y-8">
     <div
-      class="flex flex-col justify-between gap-6 rounded-3xl bg-[#1E293B] p-6 shadow-sm xl:flex-row xl:items-center"
+      class="flex min-w-0 flex-col justify-between gap-6 rounded-3xl bg-[#1E293B] p-6 shadow-sm xl:flex-row xl:items-center"
     >
-      <div class="space-y-4">
-        <h1 class="text-3xl font-bold text-tertiary-300">
+      <div class="min-w-0 space-y-4">
+        <h1 class="break-all text-3xl font-bold text-tertiary-300">
           {{ getGreeting() }}, {{ greetingName() }}!
         </h1>
         <p class="max-w-xl text-xl text-tertiary-50">Lets get started today!</p>
@@ -23,11 +23,11 @@
           </a>
         </div>
       </div>
-      <div class="relative flex items-center justify-center rounded-3xl px-10">
+      <div class="relative flex min-w-0 items-center justify-center rounded-3xl px-0 sm:px-10">
         <img
           src="images/vector.png"
           alt="Dashboard preview"
-          class="h-42 w-auto rounded-2xl object-contain"
+          class="h-42 max-w-full rounded-2xl object-contain"
         />
         <!-- <div class="absolute -bottom-4 left-6 rounded-2xl border border-tertiary-100 bg-white px-4 py-3 text-xs shadow-md">
           <p class="font-semibold text-tertiary-700">Rata-rata transaksi hari ini</p>
@@ -39,7 +39,7 @@
     <div *ngIf="isManager" class="rounded-3xl bg-[#1E293B] p-6 shadow-sm">
       <div class="flex flex-wrap items-center gap-3">
         <h2 class="text-base font-bold text-tertiary-50">Task Overview</h2>
-        <div class="ml-auto flex rounded-full bg-[#475569] p-1 text-xs font-bold text-tertiary-100">
+        <div class="ml-auto flex overflow-x-auto rounded-full bg-[#475569] p-1 text-xs font-bold text-tertiary-100">
           <button
             type="button"
             class="rounded-full px-4 py-2"
@@ -83,7 +83,7 @@
         </button>
       </div>
 
-      <div #managerChartPanel class="mt-5 h-80 rounded-2xl bg-[#0F172A] p-4">
+      <div #managerChartPanel class="mt-5 h-80 min-w-0 rounded-2xl bg-[#0F172A] p-4">
         <canvas #managerTaskChart></canvas>
       </div>
 
@@ -200,14 +200,14 @@
           <div *ngIf="!loadingSummary() && visibleTasks().length > 0" class="grid gap-4">
             <div
               *ngFor="let task of visibleTasks()"
-              class="flex items-center justify-between gap-4 rounded-2xl bg-[#475569] px-5 py-4 shadow-sm"
+              class="flex min-w-0 flex-col items-stretch justify-between gap-4 rounded-2xl bg-[#475569] px-5 py-4 shadow-sm sm:flex-row sm:items-center"
             >
               <p class="min-w-0 truncate text-sm font-bold text-tertiary-50">
                 {{ getTaskTitle(task) }}
               </p>
               <a
                 routerLink="/task/list"
-                class="shrink-0 rounded-full bg-tertiary-200 px-4 py-2 text-xs font-bold text-tertiary-900 transition hover:bg-tertiary-300"
+                class="shrink-0 rounded-full bg-tertiary-200 px-4 py-2 text-center text-xs font-bold text-tertiary-900 transition hover:bg-tertiary-300"
               >
                 View task
               </a>
@@ -218,7 +218,7 @@
     </div>
   </div>
 
-  <div class="sticky flex h-fit flex-col gap-2">
+  <div class="flex h-fit min-w-0 flex-col gap-2 lg:sticky">
     <app-manager-notes></app-manager-notes>
     <app-sticky-notes></app-sticky-notes>
   </div>

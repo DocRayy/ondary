@@ -17,7 +17,13 @@ type MemberForm = Required<Pick<MemberRecord, 'username' | 'name' | 'email' | 'p
 @Component({
   selector: 'app-member-add',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, FcIconComponent, ImageCropperComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    FcIconComponent,
+    ImageCropperComponent,
+  ],
   templateUrl: './member-add.component.html',
 })
 export class MemberAddComponent {

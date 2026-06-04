@@ -15,7 +15,7 @@ import { GsapModalDirective } from '../../directives/gsap-modal.directive';
       (click)="cancel.emit()"
     >
       <section
-        class="w-[min(420px,calc(100vw-32px))] rounded-xl bg-white p-6 text-black shadow-2xl"
+        class="max-h-[calc(100vh-32px)] w-[min(420px,calc(100vw-32px))] overflow-y-auto rounded-xl bg-white p-6 text-black shadow-2xl"
         role="dialog"
         aria-modal="true"
         (click)="$event.stopPropagation()"
@@ -23,7 +23,7 @@ import { GsapModalDirective } from '../../directives/gsap-modal.directive';
         <h2 class="text-lg font-extrabold">{{ title }}</h2>
         <p class="mt-3 text-sm font-medium text-neutral-700">{{ message }}</p>
 
-        <div class="mt-6 flex justify-end gap-3">
+        <div class="mt-6 flex flex-col justify-end gap-3 sm:flex-row">
           <button
             type="button"
             class="h-10 rounded-md bg-neutral-100 px-5 text-sm font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-70"

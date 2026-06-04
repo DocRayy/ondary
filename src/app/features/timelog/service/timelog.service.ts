@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
@@ -21,10 +21,11 @@ export class TimelogService {
   private readonly authService = inject(AuthService);
   private readonly apiUrl = environment.API_URL;
 
-  getTimelogs() {
+  getTimelogs(filters: { month?: number | string; year?: number | string } = {}) {
     return this.http
       .get<ApiCollectionResponse<TimelogRecord>>(`${this.apiUrl}/timelogs`, {
         headers: this.createAuthHeaders(),
+        params: this.appendDateFilters(new HttpParams(), filters),
       })
       .pipe(map((response) => this.normalizeCollection(response)));
   }
@@ -127,6 +128,21 @@ export class TimelogService {
     }
 
     return 'data' in response || 'item' in response || 'result' in response;
+  }
+
+  private appendDateFilters(
+    params: HttpParams,
+    filters: { month?: number | string; year?: number | string },
+  ): HttpParams {
+    if (filters.month !== undefined && filters.month !== null && String(filters.month).trim()) {
+      params = params.set('month', String(filters.month));
+    }
+
+    if (filters.year !== undefined && filters.year !== null && String(filters.year).trim()) {
+      params = params.set('year', String(filters.year));
+    }
+
+    return params;
   }
 
   private createAuthHeaders(): HttpHeaders {

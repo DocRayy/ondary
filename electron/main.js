@@ -2,6 +2,9 @@ const { app, BrowserWindow, Notification, ipcMain } = require('electron');
 const path = require('path');
 
 const isDev = process.env.ELECTRON_DEV === 'true';
+const appIcon = isDev
+  ? path.join(__dirname, '../public/favicon.ico')
+  : path.join(__dirname, '../dist/ondary/browser/favicon.ico');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -9,6 +12,7 @@ function createWindow() {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

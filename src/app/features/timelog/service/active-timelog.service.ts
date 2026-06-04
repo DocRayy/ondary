@@ -27,6 +27,7 @@ export class ActiveTimelogService {
   private readonly isEndingSignal = signal(false);
   private readonly isEndDialogOpenSignal = signal(false);
   private readonly finishedTaskTodoIdsSignal = signal<Set<number>>(new Set());
+  private readonly pausedTaskTodoTimelogsSignal = signal<Map<number, TimelogRecord>>(new Map());
   private readonly timelogEndedSubject = new Subject<TimelogRecord>();
   private elapsedTimerId?: ReturnType<typeof setInterval>;
 
@@ -77,6 +78,54 @@ export class ActiveTimelogService {
         }),
         finalize(() => this.isCreatingSignal.set(false)),
       );
+  }
+
+  continueTimelog(record: TimelogRecord) {
+    if (!record.id) {
+      return null;
+    }
+
+    const payload: UpdateTimelogRequest = {
+      status: 'active',
+      end: null as unknown as string,
+    };
+
+    this.isCreatingSignal.set(true);
+    return this.timelogService.updateTimelog(record.id, payload).pipe(
+      tap((timelog) => {
+        this.activeTimelogSignal.set({
+          record: {
+            ...record,
+            ...timelog,
+            status: 'active',
+            start: timelog.start || record.start,
+            end: undefined,
+          },
+          elapsed: this.formatElapsed(timelog.start || record.start),
+        });
+        if (record.task_todo_id) {
+          this.pausedTaskTodoTimelogsSignal.update((items) => {
+            const nextItems = new Map(items);
+            nextItems.delete(Number(record.task_todo_id));
+            return nextItems;
+          });
+        }
+        this.playStartSound();
+      }),
+      finalize(() => this.isCreatingSignal.set(false)),
+    );
+  }
+
+  getPausedTaskTodoTimelog(taskTodoId: number | string | undefined): TimelogRecord | null {
+    if (!taskTodoId) {
+      return null;
+    }
+
+    return this.pausedTaskTodoTimelogsSignal().get(Number(taskTodoId)) ?? null;
+  }
+
+  isPausedTaskTodo(taskTodoId: number | string | undefined): boolean {
+    return Boolean(this.getPausedTaskTodoTimelog(taskTodoId));
   }
 
   openEndDialog(): void {
@@ -137,6 +186,23 @@ export class ActiveTimelogService {
             this.finishedTaskTodoIdsSignal.update((ids) =>
               new Set(ids).add(Number(activeTimelog.record.task_todo_id)),
             );
+            this.pausedTaskTodoTimelogsSignal.update((items) => {
+              const nextItems = new Map(items);
+              nextItems.delete(Number(activeTimelog.record.task_todo_id));
+              return nextItems;
+            });
+          }
+
+          if (status === 'pause' && activeTimelog.record.task_todo_id) {
+            this.pausedTaskTodoTimelogsSignal.update((items) => {
+              const nextItems = new Map(items);
+              nextItems.set(Number(activeTimelog.record.task_todo_id), {
+                ...activeTimelog.record,
+                ...timelog,
+                status: 'pause',
+              });
+              return nextItems;
+            });
           }
 
           this.activeTimelogSignal.set(null);
@@ -169,14 +235,25 @@ export class ActiveTimelogService {
     const finishedTaskTodoIds = records
       .filter((record) => record.status === 'finish' && record.task_todo_id)
       .map((record) => Number(record.task_todo_id));
+    const pausedTaskTodoTimelogs = records
+      .filter(
+        (record) =>
+          this.isPauseStatus(record.status) &&
+          record.task_todo_id &&
+          (!currentUserId || Number(record.user_id) === Number(currentUserId)),
+      )
+      .reduce((items, record) => {
+        items.set(Number(record.task_todo_id), record);
+        return items;
+      }, new Map<number, TimelogRecord>());
     const activeRecord = records.find(
       (record) =>
-        record.status === 'active' &&
-        !record.end &&
+        (record.status || '').toLowerCase().trim() === 'active' &&
         (!currentUserId || Number(record.user_id) === Number(currentUserId)),
     );
 
     this.finishedTaskTodoIdsSignal.set(new Set(finishedTaskTodoIds));
+    this.pausedTaskTodoTimelogsSignal.set(pausedTaskTodoTimelogs);
     this.activeTimelogSignal.set(
       activeRecord
         ? {
@@ -240,6 +317,11 @@ export class ActiveTimelogService {
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  }
+
+  private isPauseStatus(status: string | undefined): boolean {
+    const normalized = (status || '').toLowerCase().trim();
+    return normalized === 'pause' || normalized === 'paused';
   }
 
   private playStartSound(): void {

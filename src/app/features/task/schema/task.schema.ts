@@ -99,6 +99,10 @@ export interface UserOption {
   username: string;
   email: string;
   name?: string;
+  photo?: string;
+  photo_url?: string;
+  avatar?: string;
+  image?: string;
 }
 
 export const getTaskUsers = (task: TaskRecord | null | undefined): UserOption[] => {

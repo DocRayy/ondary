@@ -1,4 +1,4 @@
-<section class="space-y-7 pr-8 text-black">
+<section class="space-y-7 pr-0 text-black lg:pr-8">
   <div class="flex flex-wrap items-center gap-4">
     <div class="flex items-center gap-3">
       <h1 class="text-base font-extrabold text-white">Team Member List</h1>
@@ -19,7 +19,7 @@
       placeholder="Search user"
       [ngModel]="searchTerm()"
       (ngModelChange)="searchTerm.set($event)"
-      class="ml-auto h-12 w-60 rounded-xl border-0 bg-tertiary-100 px-5 text-sm font-bold text-black outline-none placeholder:text-black"
+      class="ml-0 h-12 w-full rounded-xl border-0 bg-tertiary-100 px-5 text-sm font-bold text-black outline-none placeholder:text-black sm:ml-auto sm:w-60"
     />
   </div>
 
@@ -103,7 +103,7 @@
     (click)="closeEditUser()"
   >
     <form
-      class="w-[min(760px,calc(100vw-32px))] rounded-xl bg-white p-6 text-black shadow-2xl"
+      class="max-h-[calc(100vh-32px)] w-[min(760px,calc(100vw-32px))] overflow-y-auto rounded-xl bg-white p-6 text-black shadow-2xl"
       role="dialog"
       aria-modal="true"
       (click)="$event.stopPropagation()"
