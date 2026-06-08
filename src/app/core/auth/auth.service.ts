@@ -22,8 +22,22 @@ export interface AuthUser {
 interface LoginResponse {
   token?: string;
   access_token?: string;
+  accessToken?: string;
+  auth_token?: string;
+  authToken?: string;
+  jwt?: string;
   user?: AuthUser;
-  data?: AuthUser | { user?: AuthUser; token?: string; access_token?: string };
+  data?:
+    | AuthUser
+    | {
+        user?: AuthUser;
+        token?: string;
+        access_token?: string;
+        accessToken?: string;
+        auth_token?: string;
+        authToken?: string;
+        jwt?: string;
+      };
 }
 
 @Injectable({
@@ -69,11 +83,11 @@ export class AuthService {
   }
 
   isAuthenticated() {
-    return Boolean(this.getToken() || this.getUser());
+    return Boolean(this.getToken());
   }
 
   getToken() {
-    return localStorage.getItem(this.tokenKey);
+    return this.normalizeToken(localStorage.getItem(this.tokenKey));
   }
 
   getUser(): AuthUser | null {
@@ -100,13 +114,31 @@ export class AuthService {
     const directDataUser = nestedData && !('user' in nestedData) ? (nestedData as AuthUser) : null;
 
     return {
-      token:
+      token: this.normalizeToken(
         response.token ??
-        response.access_token ??
-        (nestedData && 'token' in nestedData ? nestedData.token : null) ??
-        (nestedData && 'access_token' in nestedData ? nestedData.access_token : null) ??
-        null,
+          response.access_token ??
+          response.accessToken ??
+          response.auth_token ??
+          response.authToken ??
+          response.jwt ??
+          (nestedData && 'token' in nestedData ? nestedData.token : null) ??
+          (nestedData && 'access_token' in nestedData ? nestedData.access_token : null) ??
+          (nestedData && 'accessToken' in nestedData ? nestedData.accessToken : null) ??
+          (nestedData && 'auth_token' in nestedData ? nestedData.auth_token : null) ??
+          (nestedData && 'authToken' in nestedData ? nestedData.authToken : null) ??
+          (nestedData && 'jwt' in nestedData ? nestedData.jwt : null) ??
+          null,
+      ),
       user: response.user ?? nestedUser ?? directDataUser ?? null,
     };
+  }
+
+  private normalizeToken(token: string | null | undefined): string | null {
+    if (!token) {
+      return null;
+    }
+
+    const normalized = token.trim().replace(/^Bearer\s+/i, '');
+    return normalized || null;
   }
 }

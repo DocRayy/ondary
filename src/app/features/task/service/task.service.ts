@@ -27,12 +27,20 @@ export class TaskService {
 
   getTasks(
     userId?: number | string,
-    filters: { month?: number | string; year?: number | string } = {},
+    filters: { month?: number | string; year?: number | string; projectId?: number | string } = {},
   ) {
     let params = new HttpParams();
 
     if (userId !== undefined && userId !== null && String(userId).trim()) {
       params = params.set('user_id', String(userId));
+    }
+
+    if (
+      filters.projectId !== undefined &&
+      filters.projectId !== null &&
+      String(filters.projectId).trim()
+    ) {
+      params = params.set('project_id', String(filters.projectId));
     }
 
     params = this.appendDateFilters(params, filters);

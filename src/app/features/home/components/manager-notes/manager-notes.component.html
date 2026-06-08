@@ -61,6 +61,9 @@
     <div
       *ngFor="let item of notes(); trackBy: trackNote"
       class="rounded-2xl bg-tertiary-200 px-4 py-3"
+      [id]="'manager-note-' + item.id"
+      [class.ring-2]="isHighlightedNote(item)"
+      [class.ring-warning-300]="isHighlightedNote(item)"
     >
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">

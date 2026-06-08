@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import {
   CdkDragDrop,
   DragDropModule,
@@ -7,11 +7,14 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { FcIconComponent } from '@shared/components/fc-icon/fc-icon.component';
 import { TaskDialogComponent } from '../../components/task-dialog/task-dialog.component';
 import {
   TASK_STATUSES,
+  ProjectOption,
   TaskLabelOption,
   TaskRecord,
   TaskStatus,
@@ -41,6 +44,7 @@ interface TaskCard {
   progress: number;
   members: TaskCardMember[];
   labels: TaskLabelOption[];
+  project?: ProjectOption;
   task: TaskRecord;
 }
 
@@ -116,12 +120,14 @@ interface TimelogTimelineUser {
   ],
   templateUrl: './task-list.component.html',
 })
-export class TaskListComponent implements OnInit {
+export class TaskListComponent implements OnInit, OnDestroy {
   private readonly taskService = inject(TaskService);
   private readonly timelogService = inject(TimelogService);
   private readonly authService = inject(AuthService);
   private readonly permission = inject(RolePermissionService);
   private readonly toastService = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private notificationRouteSubscription: Subscription | null = null;
   private readonly validStatuses = new Set<TaskStatus>(TASK_STATUSES);
   private readonly timelineStartHour = 7;
   private readonly timelineEndHour = 24;
@@ -145,6 +151,7 @@ export class TaskListComponent implements OnInit {
   selectedTaskDialogStatus: TaskStatus = 'draft';
   selectedTaskDialogOrderIndex = 0;
   selectedTaskDialogTask: TaskRecord | null = null;
+  selectedTaskTodoId: number | string | null = null;
 
   readonly columns: TaskColumn[] = [
     {
@@ -235,13 +242,33 @@ export class TaskListComponent implements OnInit {
   isMyTaskMode = this.permission.isMember();
   users: UserOption[] = [];
   selectedUserId = this.permission.isManager() ? '' : String(this.getCurrentUserId() ?? '');
+  projects: ProjectOption[] = [];
+  selectedProjectId = '';
+  selectedProject: ProjectOption | null = null;
+  isProjectComboboxOpen = false;
+  isLoadingProjects = false;
   readonly isManager = this.permission.isManager();
   readonly isMember = this.permission.isMember();
 
   ngOnInit(): void {
     this.loadUsers();
+    this.loadProjects();
     this.loadTasks();
     this.loadTimelogs();
+    this.notificationRouteSubscription = this.route.queryParamMap.subscribe((params) => {
+      const taskId = params.get('task_id');
+      const taskTodoId = params.get('task_todo_id');
+
+      if (!taskId) {
+        return;
+      }
+
+      this.openNotificationTask(taskId, taskTodoId);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.notificationRouteSubscription?.unsubscribe();
   }
 
   private createCalendar(year: number, month: number): CalendarDay[][] {
@@ -360,6 +387,9 @@ export class TaskListComponent implements OnInit {
 
   onTaskDialogVisibleChange(visible: boolean) {
     this.isTaskDialogOpen = visible;
+    if (!visible) {
+      this.selectedTaskTodoId = null;
+    }
   }
 
   onTaskCreated(task: TaskRecord) {
@@ -463,6 +493,10 @@ export class TaskListComponent implements OnInit {
     return member.id;
   }
 
+  trackProjectById(index: number, project: ProjectOption): number | string {
+    return project.id ?? index;
+  }
+
   trackTimelogUserById(index: number, user: TimelogTimelineUser): number | string {
     return user.id ?? index;
   }
@@ -530,6 +564,21 @@ export class TaskListComponent implements OnInit {
     this.loadTimelogs();
   }
 
+  toggleProjectCombobox(): void {
+    this.isProjectComboboxOpen = !this.isProjectComboboxOpen;
+
+    if (!this.projects.length && !this.isLoadingProjects) {
+      this.loadProjects();
+    }
+  }
+
+  selectProject(project: ProjectOption | null): void {
+    this.selectedProject = project;
+    this.selectedProjectId = project?.id ? String(project.id) : '';
+    this.isProjectComboboxOpen = false;
+    this.loadTasks();
+  }
+
   getTimelogRowHeight(user: TimelogTimelineUser): number {
     return Math.max(48, user.lanes * 42);
   }
@@ -547,6 +596,23 @@ export class TaskListComponent implements OnInit {
       colorClasses[(color || '').toLowerCase()] ||
       'bg-neutral-100 text-neutral-700 ring-neutral-200'
     );
+  }
+
+  getProjectName(project: ProjectOption | null | undefined): string {
+    if (!project) {
+      return 'All Projects';
+    }
+
+    return project.label || project.name || `Project #${project.id}`;
+  }
+
+  getProjectInitial(project: ProjectOption | null | undefined): string {
+    return this.getProjectName(project).trim().slice(0, 1).toUpperCase() || '?';
+  }
+
+  getProjectPhoto(project: ProjectOption | null | undefined): string {
+    const photo = project?.photo_url || project?.photo || project?.avatar || project?.image;
+    return getApiMediaUrl(photo) || '';
   }
 
   getCalendarDayTasks(day: CalendarDay): TaskRecord[] {
@@ -587,7 +653,9 @@ export class TaskListComponent implements OnInit {
     this.taskErrorMessage = '';
 
     forkJoin({
-      tasks: this.taskService.getTasks(this.getTaskFilterUserId()),
+      tasks: this.taskService.getTasks(this.getTaskFilterUserId(), {
+        projectId: this.selectedProjectId || undefined,
+      }),
       taskTodos: this.taskService.getTaskTodos(),
       labels: this.taskService.getTaskLabels(),
     }).subscribe({
@@ -664,6 +732,7 @@ export class TaskListComponent implements OnInit {
       progress,
       members: this.getTaskMembers(task),
       labels: this.getTaskLabels(task),
+      project: this.getTaskProject(task),
       task,
     };
   }
@@ -695,7 +764,8 @@ export class TaskListComponent implements OnInit {
       ...card.task,
       ...payload,
     };
-    card.progress = targetColumn.status === 'completed' ? 100 : 0;
+    card.progress =
+      targetColumn.status === 'completed' ? 100 : this.normalizeProgress(card.task.progress);
 
     this.taskService.updateTask(card.id, payload).subscribe({
       next: (updatedTask) => {
@@ -703,11 +773,18 @@ export class TaskListComponent implements OnInit {
           ...card.task,
           ...updatedTask,
         };
+        card.progress =
+          this.getTaskBoardStatus(card.task) === 'completed'
+            ? 100
+            : this.normalizeProgress(card.task.progress);
         this.toastService.success(updatedTask);
       },
       error: (error) => {
         card.task = previousTask;
-        card.progress = this.getTaskBoardStatus(previousTask) === 'completed' ? 100 : 0;
+        card.progress =
+          this.getTaskBoardStatus(previousTask) === 'completed'
+            ? 100
+            : this.normalizeProgress(previousTask.progress);
         this.taskErrorMessage = this.toastService.getErrorMessage(error, '');
         this.toastService.errorFrom(error);
         this.loadTasks();
@@ -737,6 +814,16 @@ export class TaskListComponent implements OnInit {
         this.isLoadingTaskDetail = false;
       },
     });
+  }
+
+  private openNotificationTask(
+    taskId: number | string,
+    taskTodoId: number | string | null,
+  ): void {
+    this.activeView = 'board';
+    this.selectedTaskTodoId = taskTodoId;
+    this.isTaskDialogOpen = true;
+    this.loadTaskDetail(taskId);
   }
 
   private getColumnByDropListId(dropListId: string): TaskColumn | undefined {
@@ -801,7 +888,17 @@ export class TaskListComponent implements OnInit {
   }
 
   private getTaskTodos(task: TaskRecord): TaskTodoRecord[] {
-    return task.task_todos || task.taskTodos || task.todos || [];
+    const embeddedTodos = task.task_todos || task.taskTodos || task.todos;
+    if (embeddedTodos?.length) {
+      return embeddedTodos;
+    }
+
+    const taskId = Number(task.id);
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      return [];
+    }
+
+    return this.allTaskTodos.filter((todo) => Number(todo.task_id) === taskId);
   }
 
   private getTaskLabels(task: TaskRecord): TaskLabelOption[] {
@@ -817,6 +914,24 @@ export class TaskListComponent implements OnInit {
 
     const selectedIds = new Set(labelIds);
     return this.taskLabels.filter((label) => selectedIds.has(Number(label.id)));
+  }
+
+  private getTaskProject(task: TaskRecord): ProjectOption | undefined {
+    if (task.project) {
+      return task.project;
+    }
+
+    const projectId = Number(task.project_id);
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      return undefined;
+    }
+
+    return (
+      this.projects.find((project) => Number(project.id) === projectId) || {
+        id: projectId,
+        label: `Project #${projectId}`,
+      }
+    );
   }
 
   private parseIdList(value: Array<number | string> | string | undefined): number[] {
@@ -1139,6 +1254,35 @@ export class TaskListComponent implements OnInit {
       },
       error: () => {
         this.users = [];
+      },
+    });
+  }
+
+  private loadProjects(): void {
+    this.isLoadingProjects = true;
+
+    this.taskService.getProjects().subscribe({
+      next: (projects) => {
+        this.projects = projects.map((project) => ({
+          ...project,
+          label: project.label || project.name || `Project #${project.id}`,
+        }));
+
+        if (this.selectedProjectId) {
+          this.selectedProject =
+            this.projects.find((project) => String(project.id) === this.selectedProjectId) ||
+            this.selectedProject;
+        }
+
+        if (this.allTasks.length) {
+          this.populateBoard(this.allTasks);
+        }
+
+        this.isLoadingProjects = false;
+      },
+      error: () => {
+        this.projects = [];
+        this.isLoadingProjects = false;
       },
     });
   }

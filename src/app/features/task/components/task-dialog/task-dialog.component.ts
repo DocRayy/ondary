@@ -56,6 +56,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
   @Input() defaultStatus: TaskStatus = 'draft';
   @Input() orderIndex = 0;
   @Input() task: TaskRecord | null = null;
+  @Input() highlightedTodoId: number | string | null = null;
   @Input() isReadonly = false;
   @Output() visibleChange = new EventEmitter<boolean>();
   @Output() taskCreated = new EventEmitter<TaskRecord>();
@@ -81,6 +82,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
   isTodoUserDialogOpen = false;
   isDeleteDialogOpen = false;
   isLabelComboboxOpen = false;
+  isProjectComboboxOpen = false;
   isSaving = false;
   isAddingTodo = false;
   isDeleting = false;
@@ -167,6 +169,31 @@ export class TaskDialogComponent implements OnInit, OnChanges {
 
   closeLabelCombobox(): void {
     this.isLabelComboboxOpen = false;
+  }
+
+  toggleProjectCombobox(): void {
+    if (this.isReadonly) {
+      return;
+    }
+
+    this.isProjectComboboxOpen = !this.isProjectComboboxOpen;
+
+    if (!this.projects.length && !this.isLoadingProjects) {
+      this.loadProjects();
+    }
+  }
+
+  closeProjectCombobox(): void {
+    this.isProjectComboboxOpen = false;
+  }
+
+  selectProject(project: ProjectOption): void {
+    if (this.isReadonly) {
+      return;
+    }
+
+    this.selectedProject = project;
+    this.closeProjectCombobox();
   }
 
   openDeleteDialog(): void {
@@ -404,6 +431,14 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     return this.formatTime(todo.updated_at);
   }
 
+  isHighlightedTodo(todo: TaskTodoDraft): boolean {
+    return Boolean(
+      this.highlightedTodoId &&
+        todo.id &&
+        String(todo.id) === String(this.highlightedTodoId),
+    );
+  }
+
   getTodoDuration(todo: TaskTodoDraft): string {
     const createdDate = this.parseDate(todo.created_at);
     const updatedDate = this.parseDate(todo.updated_at);
@@ -555,6 +590,20 @@ export class TaskDialogComponent implements OnInit, OnChanges {
 
   getProjectName(project: ProjectOption): string {
     return project.name || project.label || `Project #${project.id}`;
+  }
+
+  getProjectInitial(project: ProjectOption | undefined): string {
+    return (
+      String(project ? this.getProjectName(project) : '?')
+        .trim()
+        .slice(0, 1)
+        .toUpperCase() || '?'
+    );
+  }
+
+  getProjectPhoto(project: ProjectOption | undefined): string {
+    const photo = project?.photo_url || project?.photo || project?.avatar || project?.image;
+    return getApiMediaUrl(photo) || '';
   }
 
   getUserLabel(user: UserOption): string {
@@ -782,6 +831,7 @@ export class TaskDialogComponent implements OnInit, OnChanges {
     this.selectedDueDate = dayjs().format('YYYY-MM-DD');
     this.selectedLabels = [];
     this.isLabelComboboxOpen = false;
+    this.isProjectComboboxOpen = false;
     this.errorMessage = '';
     this.todoErrorMessage = '';
     this.isTodoDialogOpen = false;

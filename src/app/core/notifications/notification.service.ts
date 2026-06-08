@@ -1,17 +1,29 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Subject, map } from 'rxjs';
+import { Subject, map, throwError } from 'rxjs';
 import { io, Socket } from 'socket.io-client';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
+import { createInvalidApiIdError, normalizeApiId } from '../../shared/utils/api-id';
+
+export type NotificationType =
+  | 'task_created'
+  | 'task_status_updated'
+  | 'task_todo_created'
+  | 'manager_note_created';
 
 export interface NotificationItem {
   id?: number | string;
   user_id?: number | string;
+  type?: NotificationType | string;
   title: string;
   message?: string;
   is_read?: boolean | number;
+  task_id?: number | string | null;
+  task_todo_id?: number | string | null;
+  manager_note_id?: number | string | null;
   created_at?: string;
+  updated_at?: string;
   time?: string;
   tone?: 'info' | 'success' | 'warning';
 }
@@ -92,6 +104,21 @@ export class NotificationService {
         headers: this.createAuthHeaders(),
       })
       .pipe(map((response) => this.normalizeCollection(response)));
+  }
+
+  markAsRead(notificationId: number | string) {
+    const id = normalizeApiId(notificationId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('notification id'));
+    }
+
+    return this.http.patch<{ title?: string; message?: string }>(
+      `${this.apiUrl}/notifications/${id}/read`,
+      {},
+      {
+        headers: this.createAuthHeaders(),
+      },
+    );
   }
 
   async showDesktopNotification(notification: NotificationItem): Promise<void> {

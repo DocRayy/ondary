@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { forkJoin } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { AuthService } from '../../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../../core/auth/role-permission.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -17,12 +19,14 @@ const MANAGER_NOTE_RECIPIENT_ROLES = ['member', 'admin'];
   imports: [CommonModule, FormsModule, ConfirmationModalComponent],
   templateUrl: './manager-notes.component.html',
 })
-export class ManagerNotesComponent implements OnInit {
+export class ManagerNotesComponent implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly permission = inject(RolePermissionService);
   private readonly managerNoteService = inject(ManagerNoteService);
   private readonly memberService = inject(MemberService);
   private readonly toastService = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private managerNoteRouteSubscription: Subscription | null = null;
 
   readonly notes = signal<ManagerNoteRecord[]>([]);
   readonly users = signal<MemberRecord[]>([]);
@@ -33,6 +37,7 @@ export class ManagerNotesComponent implements OnInit {
   readonly errorMessage = signal('');
   readonly editingNote = signal<ManagerNoteRecord | null>(null);
   readonly notePendingDelete = signal<ManagerNoteRecord | null>(null);
+  readonly highlightedNoteId = signal<string | null>(null);
   readonly canManageNotes = this.permission.canManageManagerNotes();
 
   formTitle = '';
@@ -40,8 +45,17 @@ export class ManagerNotesComponent implements OnInit {
   selectedUserIds: Record<string, boolean> = {};
 
   ngOnInit(): void {
+    this.managerNoteRouteSubscription = this.route.queryParamMap.subscribe((params) => {
+      const managerNoteId = params.get('manager_note_id');
+      this.highlightedNoteId.set(managerNoteId);
+      this.scrollHighlightedNoteIntoView(managerNoteId);
+    });
     this.loadNotes();
     this.loadUsers();
+  }
+
+  ngOnDestroy(): void {
+    this.managerNoteRouteSubscription?.unsubscribe();
   }
 
   openForm(): void {
@@ -82,17 +96,17 @@ export class ManagerNotesComponent implements OnInit {
     const editingNote = this.editingNote();
 
     if (!title || !userIds.length) {
-      this.errorMessage.set('Lengkapi title dan minimal satu user.');
+      this.errorMessage.set('Completed the title and select at least one user.');
       return;
     }
 
     if (editingNote && userIds.length !== 1) {
-      this.errorMessage.set('Pilih satu user untuk edit manager note.');
+      this.errorMessage.set('Select one user to edit the manager note.');
       return;
     }
 
     if (title.length > 150) {
-      this.errorMessage.set('Title maksimal 150 karakter.');
+      this.errorMessage.set('Title must be a maximum of 150 characters.');
       return;
     }
 
@@ -221,6 +235,14 @@ export class ManagerNotesComponent implements OnInit {
     return user.id ?? index;
   }
 
+  isHighlightedNote(note: ManagerNoteRecord): boolean {
+    return Boolean(
+      this.highlightedNoteId() &&
+        note.id &&
+        String(note.id) === String(this.highlightedNoteId()),
+    );
+  }
+
   private loadNotes(): void {
     const currentUserId = this.authService.getUser()?.id;
     this.loading.set(true);
@@ -233,6 +255,7 @@ export class ManagerNotesComponent implements OnInit {
             : notes.filter((note) => Number(note.user_id) === Number(currentUserId)),
         );
         this.loading.set(false);
+        this.scrollHighlightedNoteIntoView(this.highlightedNoteId());
       },
       error: () => {
         this.notes.set([]);
@@ -261,5 +284,17 @@ export class ManagerNotesComponent implements OnInit {
     this.saving.set(false);
     this.toastService.success(response);
     this.closeForm();
+  }
+
+  private scrollHighlightedNoteIntoView(noteId: string | null): void {
+    if (!noteId) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`manager-note-${noteId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 }

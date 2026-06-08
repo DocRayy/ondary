@@ -92,6 +92,10 @@ export interface ProjectOption {
   label?: string;
   name?: string;
   description?: string;
+  photo?: string;
+  photo_url?: string;
+  image?: string;
+  avatar?: string;
 }
 
 export interface UserOption {

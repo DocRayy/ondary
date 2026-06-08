@@ -105,20 +105,92 @@
     <div
       class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-white max-md:flex-col max-md:items-stretch"
     >
-      <label class="flex items-center gap-3 max-md:flex-col max-md:items-stretch">
+      <label
+        class="flex items-center gap-3 max-md:flex-col max-md:items-stretch"
+        (click)="$event.stopPropagation()"
+      >
         <span>On project</span>
-        <select
-          [(ngModel)]="selectedProject"
-          [disabled]="isReadonly"
-          class="h-[30px] w-[225px] rounded-md border-0 bg-primary-200 px-3 text-xs text-white outline-none max-md:w-full"
-        >
-          <option [ngValue]="undefined">
-            {{ isLoadingProjects ? 'Loading...' : 'Select Project' }}
-          </option>
-          <option *ngFor="let project of projects" [ngValue]="project">
-            {{ getProjectName(project) }}
-          </option>
-        </select>
+        <div class="relative w-[225px] max-md:w-full">
+          <button
+            type="button"
+            class="flex h-[30px] w-full items-center justify-between gap-2 rounded-md border-0 bg-primary-200 px-3 text-left text-xs text-white outline-none disabled:opacity-70"
+            [disabled]="isReadonly"
+            aria-haspopup="listbox"
+            [attr.aria-expanded]="isProjectComboboxOpen"
+            (click)="toggleProjectCombobox()"
+          >
+            <span class="flex min-w-0 items-center gap-2">
+              <ng-container *ngIf="selectedProject">
+                <img
+                  *ngIf="getProjectPhoto(selectedProject) as selectedProjectPhoto; else selectedProjectInitial"
+                  [src]="selectedProjectPhoto"
+                  [alt]="getProjectName(selectedProject)"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
+                />
+                <ng-template #selectedProjectInitial>
+                  <span
+                    class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary-500 text-2xs font-bold text-white"
+                  >
+                    {{ getProjectInitial(selectedProject) }}
+                  </span>
+                </ng-template>
+              </ng-container>
+              <span class="truncate">
+                {{
+                  selectedProject
+                    ? getProjectName(selectedProject)
+                    : isLoadingProjects
+                      ? 'Loading...'
+                      : 'Select Project'
+                }}
+              </span>
+            </span>
+            <span class="shrink-0 text-2xs">v</span>
+          </button>
+
+          <div
+            *ngIf="isProjectComboboxOpen"
+            class="absolute left-0 z-20 mt-2 max-h-64 w-full overflow-auto rounded-md bg-primary-500 p-2 text-xs text-white shadow-xl"
+            role="listbox"
+            aria-label="Projects"
+          >
+            <div
+              *ngIf="isLoadingProjects"
+              class="px-2 py-3 text-center font-semibold text-neutral-300"
+            >
+              Loading...
+            </div>
+            <div
+              *ngIf="!isLoadingProjects && !projects.length"
+              class="px-2 py-3 text-center font-semibold text-neutral-300"
+            >
+              No projects found.
+            </div>
+            <button
+              *ngFor="let project of projects"
+              type="button"
+              class="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-primary-100"
+              role="option"
+              [attr.aria-selected]="selectedProject?.id === project.id"
+              (click)="selectProject(project)"
+            >
+              <img
+                *ngIf="getProjectPhoto(project) as projectPhoto; else projectInitial"
+                [src]="projectPhoto"
+                [alt]="getProjectName(project)"
+                class="h-6 w-6 shrink-0 rounded-full object-cover"
+              />
+              <ng-template #projectInitial>
+                <span
+                  class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-200 text-2xs font-bold text-white"
+                >
+                  {{ getProjectInitial(project) }}
+                </span>
+              </ng-template>
+              <span class="truncate font-semibold">{{ getProjectName(project) }}</span>
+            </button>
+          </div>
+        </div>
       </label>
 
       <label class="flex items-center gap-3 max-md:flex-col max-md:items-stretch">
@@ -256,6 +328,9 @@
       <article
         *ngFor="let todo of taskTodos"
         class="relative min-h-[172px] rounded-xl border border-[#2F4156] px-5 py-4"
+        [class.ring-2]="isHighlightedTodo(todo)"
+        [class.ring-warning-300]="isHighlightedTodo(todo)"
+        [class.bg-warning-50/10]="isHighlightedTodo(todo)"
       >
         <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
           <span

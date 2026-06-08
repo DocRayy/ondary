@@ -11,12 +11,14 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import dayjs from 'dayjs';
 import { environment } from '../../../../environments/environment';
 import { AuthService, AuthUser } from '../../../core/auth/auth.service';
 import { NotificationItem, NotificationService } from '../../../core/notifications/notification.service';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
+import { ToastService } from '../../../shared/components/toast/toast.service';
 import { normalizeApiId } from '../../../shared/utils/api-id';
 import { getApiMediaUrl } from '../../../shared/utils/media';
 import 'dayjs/locale/en';
@@ -42,6 +44,8 @@ declare global {
 export class HeaderComponent implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly notificationService = inject(NotificationService);
+  private readonly router = inject(Router);
+  private readonly toastService = inject(ToastService);
   private readonly http = inject(HttpClient);
   private readonly apiUrl = environment.API_URL;
   private timerId: ReturnType<typeof setInterval> | null = null;
@@ -86,10 +90,15 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.loadLoggedInUser();
     this.loadNotifications();
     this.notificationSubscription = this.notificationService.created$.subscribe((notification) => {
+      const viewNotification = this.toViewNotification(notification);
       this.notifications.update((items) => [
-        this.toViewNotification(notification),
+        viewNotification,
         ...items.filter((item) => item.id === undefined || item.id !== notification.id),
       ]);
+      this.toastService.success({
+        title: viewNotification.title || 'Notification',
+        message: viewNotification.message || viewNotification.title || 'Notification baru',
+      });
     });
   }
 
@@ -111,6 +120,20 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   toggleSidebar(): void {
     this.sidebarToggle.emit();
+  }
+
+  openNotification(item: NotificationItem): void {
+    this.closeNotifications();
+    this.markNotificationAsRead(item);
+
+    const commands = this.getNotificationRoute(item);
+    if (!commands) {
+      return;
+    }
+
+    void this.router.navigate(commands.path, {
+      queryParams: commands.queryParams,
+    });
   }
 
   installNow(): void {
@@ -255,11 +278,98 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   private toViewNotification(item: NotificationItem): NotificationItem {
+    const content = this.getNotificationContent(item);
     return {
       ...item,
+      title: content.title,
+      message: content.message,
       time: this.formatNotificationTime(item.created_at),
       tone: this.toBoolean(item.is_read) ? 'info' : 'warning',
     };
+  }
+
+  private getNotificationContent(item: NotificationItem): { title: string; message: string } {
+    const fallbackTitle = item.title || 'Notification';
+    const fallbackMessage = item.message || '';
+
+    switch (item.type) {
+      case 'task_created':
+        return {
+          title: item.title || 'Task baru',
+          message: item.message || `Task #${item.task_id ?? '-'} baru dibuat.`,
+        };
+      case 'task_status_updated':
+        return {
+          title: item.title || 'Status task diperbarui',
+          message: item.message || `Status task #${item.task_id ?? '-'} diperbarui.`,
+        };
+      case 'task_todo_created':
+        return {
+          title: item.title || 'Todo baru',
+          message: item.message || `Todo #${item.task_todo_id ?? '-'} ditambahkan ke task #${item.task_id ?? '-'}.`,
+        };
+      case 'manager_note_created':
+        return {
+          title: item.title || 'Manager note baru',
+          message: item.message || `Manager note #${item.manager_note_id ?? '-'} baru dibuat.`,
+        };
+      default:
+        return { title: fallbackTitle, message: fallbackMessage };
+    }
+  }
+
+  private markNotificationAsRead(item: NotificationItem): void {
+    if (!item.id || this.toBoolean(item.is_read)) {
+      return;
+    }
+
+    this.notifications.update((items) =>
+      items.map((notification) =>
+        notification.id === item.id
+          ? { ...notification, is_read: true, tone: 'info' }
+          : notification,
+      ),
+    );
+
+    this.notificationService.markAsRead(item.id).subscribe({
+      error: () => {
+        this.notifications.update((items) =>
+          items.map((notification) =>
+            notification.id === item.id
+              ? { ...notification, is_read: item.is_read, tone: item.tone }
+              : notification,
+          ),
+        );
+      },
+    });
+  }
+
+  private getNotificationRoute(item: NotificationItem):
+    | { path: unknown[]; queryParams: Record<string, string | number> }
+    | null {
+    if (item.type === 'manager_note_created' && item.manager_note_id) {
+      return {
+        path: ['/'],
+        queryParams: { manager_note_id: item.manager_note_id },
+      };
+    }
+
+    if (
+      (item.type === 'task_created' ||
+        item.type === 'task_status_updated' ||
+        item.type === 'task_todo_created') &&
+      item.task_id
+    ) {
+      return {
+        path: ['/task/list'],
+        queryParams: {
+          task_id: item.task_id,
+          ...(item.task_todo_id ? { task_todo_id: item.task_todo_id } : {}),
+        },
+      };
+    }
+
+    return null;
   }
 }
 
