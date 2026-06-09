@@ -38,6 +38,10 @@
       "target": "nsis",
       "icon": "build/ondary-icon.ico",
       "signAndEditExecutable": false
+    },
+    "nsis": {
+      "installerIcon": "build/ondary-icon.ico",
+      "uninstallerIcon": "build/ondary-icon.ico"
     }
   },
   "private": true,
