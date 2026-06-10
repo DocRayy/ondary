@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { environment } from '../../../../environments/environment';
 import { AuthService, AuthUser } from '../../../core/auth/auth.service';
 import { NotificationItem, NotificationService } from '../../../core/notifications/notification.service';
+import { RealtimeService } from '../../../core/realtime/realtime.service';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
 import { ToastService } from '../../../shared/components/toast/toast.service';
 import { normalizeApiId } from '../../../shared/utils/api-id';
@@ -44,6 +45,7 @@ declare global {
 export class HeaderComponent implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly notificationService = inject(NotificationService);
+  private readonly realtimeService = inject(RealtimeService);
   private readonly router = inject(Router);
   private readonly toastService = inject(ToastService);
   private readonly http = inject(HttpClient);
@@ -60,6 +62,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
   readonly isDesktopInstalled = signal(Boolean(window.ondaryDesktop));
   readonly isInstallingDesktop = signal(false);
   readonly desktopInstallMessage = signal('');
+  readonly realtimeConnected = this.realtimeService.connected;
   private readonly nowDayjs = computed(() => dayjs(this.now()).locale('en'));
   private readonly desktopInstallerUrl = `${this.apiUrl}/downloads/ondary-installer.exe`;
 

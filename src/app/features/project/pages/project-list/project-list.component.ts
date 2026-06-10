@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../../core/auth/auth.service';
+import { RealtimeService } from '../../../../core/realtime/realtime.service';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { ImageCropperComponent } from '../../../../shared/components/image-cropper/image-cropper.component';
@@ -27,6 +28,7 @@ import { ProjectService } from '../../service/project.service';
 export class ProjectListComponent implements OnInit {
   private readonly projectService = inject(ProjectService);
   private readonly authService = inject(AuthService);
+  private readonly realtimeService = inject(RealtimeService);
   private readonly toastService = inject(ToastService);
 
   readonly projects = signal<ProjectRecord[]>([]);
@@ -57,6 +59,7 @@ export class ProjectListComponent implements OnInit {
 
   openProjectDetail(project: ProjectRecord): void {
     this.selectedProject.set(project);
+    this.realtimeService.joinProject(project.id);
   }
 
   closeProjectDetail(): void {

@@ -6,6 +6,7 @@
   "main": "electron/main.js",
   "scripts": {
     "ng": "ng",
+    "prebuild": "node scripts/generate-environment.js",
     "start": "ng serve",
     "build": "ng build",
     "electron": "npm run build -- --base-href ./ && electron .",

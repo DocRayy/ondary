@@ -13,7 +13,7 @@
         ></fc-icon>
       </button>
 
-      <div *ngIf="!isDesktopInstalled(); else installedSearch" class="w-full">
+      <div *ngIf="!isDesktopInstalled();" class="w-full">
         <button
           type="button"
           class="flex h-12 w-full items-center justify-center rounded-full bg-primary-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-700"
@@ -25,29 +25,21 @@
       </div>
     </div>
 
-    <ng-template #installedSearch>
-      <div class="relative flex w-full items-center">
-        <span class="pointer-events-none absolute left-4 text-tertiary-400">
-          <svg
-            class="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <circle cx="11" cy="11" r="7"></circle>
-            <path d="m20 20-3.5-3.5"></path>
-          </svg>
-        </span>
-        <input
-          type="text"
-          placeholder="Cari task"
-          class="w-full rounded-full border border-tertiary-200 bg-white py-3 pl-12 pr-4 text-sm text-tertiary-700 shadow-sm outline-none transition focus:border-primary-400"
-        />
-      </div>
-    </ng-template>
-
     <div class="relative ml-auto flex min-w-0 shrink-0">
+      <!-- <div
+        class="hidden items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold md:flex"
+        [ngClass]="
+          realtimeConnected()
+            ? 'border-success-200 bg-success-50 text-success-700'
+            : 'border-warning-200 bg-warning-50 text-warning-700'
+        "
+      >
+        <span
+          class="h-2 w-2 rounded-full"
+          [ngClass]="realtimeConnected() ? 'bg-success-500' : 'bg-warning-500'"
+        ></span>
+        {{ realtimeConnected() ? 'Realtime Connected' : 'Realtime Disconnected' }}
+      </div> -->
       <div class="hidden items-center ml-12 gap-2 px-4 py-2 text-sm text-tertiary-50 md:flex">
         <span class="font-medium">{{ timeLabel() }}</span>
       </div>

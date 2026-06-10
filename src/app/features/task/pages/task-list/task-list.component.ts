@@ -8,8 +8,7 @@ import {
 } from '@angular/cdk/drag-drop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { forkJoin } from 'rxjs';
-import { Subscription } from 'rxjs';
+import { finalize, forkJoin, Subscription } from 'rxjs';
 import { FcIconComponent } from '@shared/components/fc-icon/fc-icon.component';
 import { TaskDialogComponent } from '../../components/task-dialog/task-dialog.component';
 import {
@@ -28,6 +27,11 @@ import { TaskService } from '../../service/task.service';
 import { TimelogFileRecord, TimelogRecord } from '../../../timelog/schema/timelog.schema';
 import { TimelogService } from '../../../timelog/service/timelog.service';
 import { AuthService } from '../../../../core/auth/auth.service';
+import {
+  RealtimeService,
+  RealtimeTaskPayload,
+  RealtimeTodoPayload,
+} from '../../../../core/realtime/realtime.service';
 import { RolePermissionService } from '../../../../core/auth/role-permission.service';
 import { UserOption } from '../../schema/task.schema';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
@@ -124,10 +128,13 @@ export class TaskListComponent implements OnInit, OnDestroy {
   private readonly taskService = inject(TaskService);
   private readonly timelogService = inject(TimelogService);
   private readonly authService = inject(AuthService);
+  private readonly realtimeService = inject(RealtimeService);
   private readonly permission = inject(RolePermissionService);
   private readonly toastService = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private notificationRouteSubscription: Subscription | null = null;
+  private readonly realtimeSubscriptions: Subscription[] = [];
+  private readonly pendingRealtimeTaskFetches = new Set<string>();
   private readonly validStatuses = new Set<TaskStatus>(TASK_STATUSES);
   private readonly timelineStartHour = 7;
   private readonly timelineEndHour = 24;
@@ -251,10 +258,12 @@ export class TaskListComponent implements OnInit, OnDestroy {
   readonly isMember = this.permission.isMember();
 
   ngOnInit(): void {
+    this.setupRealtimeSubscriptions();
     this.loadUsers();
     this.loadProjects();
     this.loadTasks();
     this.loadTimelogs();
+    this.joinSelectedProject();
     this.notificationRouteSubscription = this.route.queryParamMap.subscribe((params) => {
       const taskId = params.get('task_id');
       const taskTodoId = params.get('task_todo_id');
@@ -269,6 +278,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.notificationRouteSubscription?.unsubscribe();
+    this.realtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
   }
 
   private createCalendar(year: number, month: number): CalendarDay[][] {
@@ -393,25 +403,16 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
 
   onTaskCreated(task: TaskRecord) {
-    const status = this.getTaskBoardStatus(task);
-    const targetColumn = this.columns.find((column) => column.status === status) || this.columns[0];
-    targetColumn.cards.push(this.mapTaskToCard(task));
-    this.updateColumnCounts();
+    this.upsertTaskRecord(task);
+    this.populateBoard(this.allTasks);
+    this.populateUpcomingTodos();
   }
 
   onTaskUpdated(task: TaskRecord) {
-    const updatedStatus = this.getTaskBoardStatus(task);
-    const updatedCard = this.mapTaskToCard(task);
-
-    this.columns.forEach((column) => {
-      column.cards = column.cards.filter((card) => String(card.id) !== String(task.id));
-    });
-
-    const targetColumn =
-      this.columns.find((column) => column.status === updatedStatus) || this.columns[0];
-    targetColumn.cards.push(updatedCard);
+    this.upsertTaskRecord(task);
+    this.populateBoard(this.allTasks);
+    this.populateUpcomingTodos();
     this.selectedTaskDialogTask = null;
-    this.updateColumnCounts();
   }
 
   onTaskDeleted(taskId: number | string) {
@@ -576,6 +577,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.selectedProject = project;
     this.selectedProjectId = project?.id ? String(project.id) : '';
     this.isProjectComboboxOpen = false;
+    this.joinSelectedProject();
     this.loadTasks();
   }
 
@@ -694,6 +696,221 @@ export class TaskListComponent implements OnInit, OnDestroy {
         this.isLoadingTimelogs = false;
       },
     });
+  }
+
+  private setupRealtimeSubscriptions(): void {
+    this.realtimeSubscriptions.push(
+      this.realtimeService.taskCreated$.subscribe((payload) => {
+        const task = this.extractTask(payload);
+        if (task) {
+          this.applyRealtimeTask(task);
+        }
+      }),
+      this.realtimeService.taskUpdated$.subscribe((payload) => {
+        const task = this.extractTask(payload);
+        if (task) {
+          this.applyRealtimeTask(task);
+        }
+      }),
+      this.realtimeService.taskMoved$.subscribe((payload) => {
+        const task = this.extractTask(payload);
+        if (task) {
+          this.applyRealtimeTask(task);
+        }
+      }),
+      this.realtimeService.taskDeleted$.subscribe((payload) => {
+        const taskId = this.extractTaskId(payload);
+        if (taskId) {
+          this.onTaskDeleted(taskId);
+        }
+      }),
+      this.realtimeService.todoUpdated$.subscribe((payload) => {
+        const todo = this.extractTodo(payload);
+        if (todo) {
+          this.applyRealtimeTodo(todo);
+        }
+      }),
+      this.realtimeService.notificationCreated$.subscribe((notification) => {
+        const taskId = this.extractNotificationTaskId(notification);
+        if (taskId) {
+          this.refreshRealtimeTask(taskId);
+        }
+      }),
+    );
+  }
+
+  private joinSelectedProject(): void {
+    if (!this.selectedProjectId) {
+      return;
+    }
+
+    this.realtimeService.joinProject(this.selectedProjectId);
+  }
+
+  private joinProjectRooms(): void {
+    if (this.selectedProjectId) {
+      this.joinSelectedProject();
+      return;
+    }
+
+    this.projects.forEach((project) => this.realtimeService.joinProject(project.id));
+  }
+
+  private applyRealtimeTask(task: TaskRecord): void {
+    if (!this.isTaskInSelectedProject(task)) {
+      if (task.id) {
+        this.onTaskDeleted(task.id);
+      }
+      return;
+    }
+
+    const existingTask = this.allTasks.find((item) => String(item.id) === String(task.id));
+    this.upsertTaskRecord({
+      ...existingTask,
+      ...task,
+    });
+    this.populateBoard(this.allTasks);
+    this.populateUpcomingTodos();
+  }
+
+  private applyRealtimeTodo(todo: TaskTodoRecord): void {
+    if (!todo.id) {
+      return;
+    }
+
+    const existingTodo = this.allTaskTodos.find((item) => String(item.id) === String(todo.id));
+    const updatedTodo = {
+      ...existingTodo,
+      ...todo,
+    };
+
+    this.allTaskTodos = [
+      updatedTodo,
+      ...this.allTaskTodos.filter((item) => String(item.id) !== String(todo.id)),
+    ];
+    this.allTasks = this.allTasks.map((task) => this.updateTaskEmbeddedTodo(task, updatedTodo));
+    this.populateBoard(this.allTasks);
+    this.populateUpcomingTodos();
+  }
+
+  private refreshRealtimeTask(taskId: number | string): void {
+    const normalizedTaskId = String(taskId);
+    if (this.pendingRealtimeTaskFetches.has(normalizedTaskId)) {
+      return;
+    }
+
+    this.pendingRealtimeTaskFetches.add(normalizedTaskId);
+    this.taskService
+      .getTask(taskId)
+      .pipe(finalize(() => this.pendingRealtimeTaskFetches.delete(normalizedTaskId)))
+      .subscribe({
+        next: (task) => this.applyRealtimeTask(task),
+        error: () => {
+          this.onTaskDeleted(taskId);
+        },
+      });
+  }
+
+  private upsertTaskRecord(task: TaskRecord): void {
+    if (!task.id) {
+      return;
+    }
+
+    this.allTasks = [
+      task,
+      ...this.allTasks.filter((item) => String(item.id) !== String(task.id)),
+    ];
+  }
+
+  private updateTaskEmbeddedTodo(task: TaskRecord, todo: TaskTodoRecord): TaskRecord {
+    if (String(task.id) !== String(todo.task_id)) {
+      return task;
+    }
+
+    return {
+      ...task,
+      task_todos: this.upsertTodoCollection(task.task_todos, todo),
+      taskTodos: this.upsertTodoCollection(task.taskTodos, todo),
+      todos: this.upsertTodoCollection(task.todos, todo),
+    };
+  }
+
+  private upsertTodoCollection(
+    todos: TaskTodoRecord[] | undefined,
+    todo: TaskTodoRecord,
+  ): TaskTodoRecord[] | undefined {
+    if (!todos?.length) {
+      return todos;
+    }
+
+    return [todo, ...todos.filter((item) => String(item.id) !== String(todo.id))];
+  }
+
+  private isTaskInSelectedProject(task: TaskRecord): boolean {
+    if (!this.selectedProjectId) {
+      return true;
+    }
+
+    return String(task.project_id) === this.selectedProjectId;
+  }
+
+  private extractTask(payload: RealtimeTaskPayload): TaskRecord | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const candidate =
+      'task' in payload
+        ? payload.task
+        : 'data' in payload
+          ? payload.data
+          : 'item' in payload
+            ? payload.item
+            : 'result' in payload
+              ? payload.result
+              : payload;
+
+    return candidate && typeof candidate === 'object' ? (candidate as TaskRecord) : null;
+  }
+
+  private extractTaskId(payload: RealtimeTaskPayload): number | string | null {
+    const task = this.extractTask(payload);
+    return task?.id ?? ('task_id' in payload ? payload.task_id : null) ?? null;
+  }
+
+  private extractTodo(payload: RealtimeTodoPayload): TaskTodoRecord | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const candidate =
+      'todo' in payload
+        ? payload.todo
+        : 'task_todo' in payload
+          ? payload.task_todo
+          : 'data' in payload
+            ? payload.data
+            : 'item' in payload
+              ? payload.item
+              : 'result' in payload
+                ? payload.result
+                : payload;
+
+    return candidate && typeof candidate === 'object' ? (candidate as TaskTodoRecord) : null;
+  }
+
+  private extractNotificationTaskId(notification: {
+    task_id?: number | string | null;
+    task?: { id?: number | string } | null;
+    data?: { task_id?: number | string | null; task?: { id?: number | string } | null };
+  }): number | string | null {
+    return (
+      notification.task_id ??
+      notification.task?.id ??
+      notification.data?.task_id ??
+      notification.data?.task?.id ??
+      null
+    );
   }
 
   private populateBoard(tasks: TaskRecord[]): void {
@@ -1273,6 +1490,8 @@ export class TaskListComponent implements OnInit, OnDestroy {
             this.projects.find((project) => String(project.id) === this.selectedProjectId) ||
             this.selectedProject;
         }
+
+        this.joinProjectRooms();
 
         if (this.allTasks.length) {
           this.populateBoard(this.allTasks);

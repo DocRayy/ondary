@@ -38,6 +38,9 @@ testem.log
 /typings
 __screenshots__/
 
+# Local environment files
+/src/environments/environment.ts
+
 # System files
 .DS_Store
 Thumbs.db

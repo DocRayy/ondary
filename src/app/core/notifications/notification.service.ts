@@ -1,9 +1,9 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Subject, map, throwError } from 'rxjs';
-import { io, Socket } from 'socket.io-client';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { createInvalidApiIdError, normalizeApiId } from '../../shared/utils/api-id';
 
 export type NotificationType =
@@ -48,20 +48,16 @@ type OndaryDesktopBridge = {
 export class NotificationService {
   private readonly http = inject(HttpClient);
   private readonly authService = inject(AuthService);
+  private readonly realtimeService = inject(RealtimeService);
   private readonly apiUrl = environment.API_URL;
-  private socket: Socket | null = null;
-  private activeToken: string | null = null;
 
   private readonly createdSubject = new Subject<NotificationItem>();
   readonly created$ = this.createdSubject.asObservable();
 
   constructor() {
-    this.authService.authChanged$.subscribe((token) => {
-      if (token) {
-        this.connect();
-      } else {
-        this.disconnect();
-      }
+    this.realtimeService.notificationCreated$.subscribe((notification) => {
+      this.createdSubject.next(notification);
+      void this.showDesktopNotification(notification);
     });
   }
 
@@ -73,29 +69,12 @@ export class NotificationService {
       return;
     }
 
-    if (this.socket?.connected && this.activeToken === token) {
-      return;
-    }
-
-    this.disconnect();
-    this.activeToken = token;
     this.requestBrowserNotificationPermission();
-
-    this.socket = io(this.apiUrl, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-    });
-
-    this.socket.on('notification.created', (notification: NotificationItem) => {
-      this.createdSubject.next(notification);
-      void this.showDesktopNotification(notification);
-    });
+    this.realtimeService.connect();
   }
 
   disconnect(): void {
-    this.socket?.disconnect();
-    this.socket = null;
-    this.activeToken = null;
+    this.realtimeService.disconnect();
   }
 
   getMine() {
