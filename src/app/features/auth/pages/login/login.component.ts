@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 
 import { AuthService } from '../../../../core/auth/auth.service';
 import { FcInputTextComponent } from '../../../../shared/components/fc-input/fc-input-text.component';
+import { ToastService } from '../../../../shared/components/toast/toast.service';
 
 interface LoginForm {
   username: string;
@@ -20,6 +21,7 @@ interface LoginForm {
 export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly toastService = inject(ToastService);
 
   loading = false;
   errorMessage = '';
@@ -46,7 +48,14 @@ export class LoginComponent {
     this.authService.login(this.loginForm.username, this.loginForm.password).subscribe({
       next: () => {
         this.loading = false;
-        this.router.navigate(['/']);
+        this.router.navigate(['/']).then((navigated) => {
+          if (navigated) {
+            this.toastService.success({
+              title: 'Login Successful',
+              message: 'Welcome back. You have successfully signed in.',
+            });
+          }
+        });
       },
       error: () => {
         this.loading = false;

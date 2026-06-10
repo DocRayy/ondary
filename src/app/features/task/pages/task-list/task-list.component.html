@@ -413,31 +413,19 @@
         <button
           type="button"
           class="grid h-8 w-8 place-items-center rounded-full bg-white text-black"
+          (click)="previousCalendarMonth()"
+          aria-label="Previous month"
         >
-          <svg
-            class="h-4 w-4"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M12 5l-5 5 5 5"></path>
-          </svg>
+          <fc-icon icon="previous-linear" class="text-base"></fc-icon>
         </button>
         <p class="text-lg font-semibold text-white">{{ currentMonthLabel }}</p>
         <button
           type="button"
           class="grid h-8 w-8 place-items-center rounded-full bg-white text-black"
+          (click)="nextCalendarMonth()"
+          aria-label="Next month"
         >
-          <svg
-            class="h-4 w-4"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M8 5l5 5-5 5"></path>
-          </svg>
+          <fc-icon icon="next-linear" class="text-base"></fc-icon>
         </button>
       </div>
 

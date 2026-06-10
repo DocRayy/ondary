@@ -240,10 +240,11 @@ export class TaskListComponent implements OnInit, OnDestroy {
   ];
 
   readonly today = new Date();
-  readonly currentYear = this.today.getFullYear();
-  readonly currentMonth = this.today.getMonth();
-  readonly currentMonthLabel = this.monthNames[this.currentMonth];
-  readonly calendarWeeks = this.createCalendar(this.currentYear, this.currentMonth);
+  selectedCalendarYear = this.today.getFullYear();
+  selectedCalendarMonth = this.today.getMonth();
+  currentMonthLabel = this.getCalendarMonthLabel();
+  calendarWeeks = this.createCalendar(this.selectedCalendarYear, this.selectedCalendarMonth);
+  calendarTasks: TaskRecord[] = [];
   upcomingTasks: UpcomingTodo[] = [];
   recapRows: RecapRow[] = [];
   isMyTaskMode = this.permission.isMember();
@@ -262,6 +263,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.loadUsers();
     this.loadProjects();
     this.loadTasks();
+    this.loadCalendarTasks();
     this.loadTimelogs();
     this.joinSelectedProject();
     this.notificationRouteSubscription = this.route.queryParamMap.subscribe((params) => {
@@ -351,6 +353,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.isMyTaskMode = !this.isMyTaskMode;
     this.selectedUserId = this.isMyTaskMode ? String(currentUserId ?? '') : '';
     this.loadTasks();
+    this.loadCalendarTasks();
   }
 
   openTaskDialog(column: TaskColumn) {
@@ -406,12 +409,14 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.upsertTaskRecord(task);
     this.populateBoard(this.allTasks);
     this.populateUpcomingTodos();
+    this.loadCalendarTasks();
   }
 
   onTaskUpdated(task: TaskRecord) {
     this.upsertTaskRecord(task);
     this.populateBoard(this.allTasks);
     this.populateUpcomingTodos();
+    this.loadCalendarTasks();
     this.selectedTaskDialogTask = null;
   }
 
@@ -423,6 +428,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.upcomingTasks = this.upcomingTasks.filter(
       (todo) => String(todo.task.id) !== String(taskId),
     );
+    this.calendarTasks = this.calendarTasks.filter((task) => String(task.id) !== String(taskId));
     this.selectedTaskDialogTask = null;
     this.updateColumnCounts();
   }
@@ -562,6 +568,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.selectedUserId = userId;
     this.isMyTaskMode = Boolean(userId);
     this.loadTasks();
+    this.loadCalendarTasks();
     this.loadTimelogs();
   }
 
@@ -579,6 +586,15 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.isProjectComboboxOpen = false;
     this.joinSelectedProject();
     this.loadTasks();
+    this.loadCalendarTasks();
+  }
+
+  previousCalendarMonth(): void {
+    this.setCalendarMonth(this.selectedCalendarYear, this.selectedCalendarMonth - 1);
+  }
+
+  nextCalendarMonth(): void {
+    this.setCalendarMonth(this.selectedCalendarYear, this.selectedCalendarMonth + 1);
   }
 
   getTimelogRowHeight(user: TimelogTimelineUser): number {
@@ -622,7 +638,9 @@ export class TaskListComponent implements OnInit, OnDestroy {
       return [];
     }
 
-    return this.allTasks.filter((task) => this.isSameDate(this.parseDate(task.due_date), day.date));
+    return this.calendarTasks.filter((task) =>
+      this.isSameDate(this.parseDate(task.due_date), day.date),
+    );
   }
 
   getVisibleCalendarTasks(day: CalendarDay): TaskRecord[] {
@@ -677,6 +695,37 @@ export class TaskListComponent implements OnInit, OnDestroy {
         this.isLoadingTasks = false;
       },
     });
+  }
+
+  private loadCalendarTasks(): void {
+    this.taskService
+      .getTasks(this.getTaskFilterUserId(), {
+        month: this.selectedCalendarMonth + 1,
+        year: this.selectedCalendarYear,
+        projectId: this.selectedProjectId || undefined,
+      })
+      .subscribe({
+        next: (tasks) => {
+          this.calendarTasks = tasks;
+        },
+        error: () => {
+          this.calendarTasks = [];
+        },
+      });
+  }
+
+  private setCalendarMonth(year: number, month: number): void {
+    const selectedMonth = new Date(year, month, 1);
+
+    this.selectedCalendarYear = selectedMonth.getFullYear();
+    this.selectedCalendarMonth = selectedMonth.getMonth();
+    this.currentMonthLabel = this.getCalendarMonthLabel();
+    this.calendarWeeks = this.createCalendar(this.selectedCalendarYear, this.selectedCalendarMonth);
+    this.loadCalendarTasks();
+  }
+
+  private getCalendarMonthLabel(): string {
+    return `${this.monthNames[this.selectedCalendarMonth]} ${this.selectedCalendarYear}`;
   }
 
   private loadTimelogs(): void {
