@@ -43,13 +43,9 @@ export class StickyNoteService {
     }
 
     return this.http
-      .patch<ApiItemResponse<StickyNoteRecord>>(
-        `${this.apiUrl}/sticky-notes/${id}`,
-        payload,
-        {
-          headers: this.createAuthHeaders(),
-        },
-      )
+      .patch<ApiItemResponse<StickyNoteRecord>>(`${this.apiUrl}/sticky-notes/${id}`, payload, {
+        headers: this.createAuthHeaders(),
+      })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
@@ -59,9 +55,12 @@ export class StickyNoteService {
       return throwError(() => createInvalidApiIdError('sticky note id'));
     }
 
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/sticky-notes/${id}`, {
-      headers: this.createAuthHeaders(),
-    });
+    return this.http.delete<{ title?: string; message?: string }>(
+      `${this.apiUrl}/sticky-notes/${id}`,
+      {
+        headers: this.createAuthHeaders(),
+      },
+    );
   }
 
   private normalizeCollection<T>(response: ApiCollectionResponse<T>): T[] {

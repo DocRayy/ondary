@@ -13,7 +13,8 @@ import {
 import { RouterModule } from '@angular/router';
 import gsap from 'gsap';
 import { AuthService } from '../../../core/auth/auth.service';
-import { RolePermissionService } from '../../../core/auth/role-permission.service';
+import { AppMenu, RolePermissionService } from '../../../core/auth/role-permission.service';
+import { AuthTransitionService } from '../../../shared/components/auth-transition/auth-transition.service';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
 import { IconDefinition } from '../../../shared/components/fc-icon/icon.constant';
 import { GsapModalDirective } from '../../../shared/directives/gsap-modal.directive';
@@ -22,7 +23,7 @@ interface NavItem {
   label: string;
   icon: IconDefinition;
   route: string;
-  menu: 'dashboard' | 'task' | 'timelog' | 'projects' | 'members' | 'reports';
+  menu: AppMenu;
   exact?: boolean;
 }
 
@@ -35,6 +36,7 @@ interface NavItem {
 export class SidebarComponent implements AfterViewInit {
   private readonly authService = inject(AuthService);
   private readonly permission = inject(RolePermissionService);
+  private readonly authTransition = inject(AuthTransitionService);
   @ViewChild('sidebarPanel') private sidebarPanel?: ElementRef<HTMLElement>;
   @ViewChildren('collapsibleLabel') private collapsibleLabels?: QueryList<ElementRef<HTMLElement>>;
   @Output() collapsedChange = new EventEmitter<boolean>();
@@ -49,6 +51,13 @@ export class SidebarComponent implements AfterViewInit {
     { label: 'Projects', icon: 'box-linear', route: '/projects/list', menu: 'projects' },
     { label: 'Team Members', icon: 'users-linear', route: '/members/list', menu: 'members' },
     { label: 'My Reports', icon: 'chart-linear', route: '/reports', menu: 'reports' },
+    { label: 'Audit Log', icon: 'history-linear', route: '/audit-log', menu: 'audit-log' },
+    {
+      label: 'Backup & Restore',
+      icon: 'database-linear',
+      route: '/backup-restore',
+      menu: 'backup-restore',
+    },
   ];
 
   readonly visibleNavItems = this.navItems.filter((item) =>
@@ -114,8 +123,12 @@ export class SidebarComponent implements AfterViewInit {
   }
 
   confirmLogout(): void {
+    const user = this.authService.getUser();
+    this.authTransition.showLogoutLoading(user);
     this.isLogoutDialogOpen = false;
-    this.authService.logout();
+    Promise.resolve(this.authService.logout()).finally(() => {
+      window.setTimeout(() => this.authTransition.hide(), 900);
+    });
   }
 
   private getLabelElements(): HTMLElement[] {

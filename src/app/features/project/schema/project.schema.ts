@@ -5,6 +5,11 @@ export interface ProjectRecord {
   name?: string;
   description?: string;
   photo?: string;
+  photo_url?: string;
+  avatar?: string;
+  image?: string;
+  file_path?: string;
+  url?: string;
   tasks?: unknown[];
   task_id?: Array<number | string>;
   created_at?: string;

@@ -7,9 +7,13 @@ import { ConfirmationModalComponent } from '../../../shared/components/confirmat
 import { ImageCropperComponent } from '../../../shared/components/image-cropper/image-cropper.component';
 import { ToastService } from '../../../shared/components/toast/toast.service';
 import { GsapModalDirective } from '../../../shared/directives/gsap-modal.directive';
-import { getApiMediaUrl, imageAcceptAttribute, isAllowedImageFile } from '../../../shared/utils/media';
+import {
+  getFirstMediaUrl,
+  imageAcceptAttribute,
+  isAllowedImageFile,
+} from '../../../shared/utils/media';
 import { MemberRecord, MemberService } from '../service/member.service';
-import { FcIconComponent } from "@app/shared/components/fc-icon/fc-icon.component";
+import { FcIconComponent } from '@app/shared/components/fc-icon/fc-icon.component';
 
 type TeamMember = MemberRecord;
 type EditMemberForm = {
@@ -86,7 +90,7 @@ export class TeamMembersComponent implements OnInit {
   }
 
   getUserPhoto(user: TeamMember): string | null {
-    return getApiMediaUrl(user.photo_url || user.photo || user.avatar || user.image);
+    return getFirstMediaUrl(user);
   }
 
   openEditUser(user: TeamMember): void {
@@ -125,7 +129,9 @@ export class TeamMembersComponent implements OnInit {
 
     if (!file) {
       this.editForm.photoFile = null;
-      this.editForm.photoPreview = this.editingUser() ? this.getUserPhoto(this.editingUser()!) || '' : '';
+      this.editForm.photoPreview = this.editingUser()
+        ? this.getUserPhoto(this.editingUser()!) || ''
+        : '';
       this.editCropFile = null;
       return;
     }
@@ -134,7 +140,7 @@ export class TeamMembersComponent implements OnInit {
       input.value = '';
       this.editForm.photoFile = null;
       this.editCropFile = null;
-      this.errorMessage.set('Upload photo hanya boleh jpg, jpeg, png, webp, atau gif.');
+      this.errorMessage.set('Photo upload only supports jpg, jpeg, png, webp, or gif.');
       return;
     }
 
@@ -161,8 +167,9 @@ export class TeamMembersComponent implements OnInit {
       return;
     }
 
-    if (!this.editForm.username.trim() || !this.editForm.name.trim() || !this.editForm.email.trim() || !this.editForm.role) {
-      this.errorMessage.set('Lengkapi username, name, email, dan role.');
+    const validationMessage = this.getEditValidationMessage(user);
+    if (validationMessage) {
+      this.errorMessage.set(validationMessage);
       return;
     }
 
@@ -186,7 +193,9 @@ export class TeamMembersComponent implements OnInit {
     this.memberService.updateUser(user.id, formData).subscribe({
       next: (response) => {
         this.users.update((users) =>
-          users.map((item) => (String(item.id) === String(user.id) ? { ...item, ...response } : item)),
+          users.map((item) =>
+            String(item.id) === String(user.id) ? { ...item, ...response } : item,
+          ),
         );
         this.toastService.success(response);
         this.updatingId.set(null);
@@ -228,6 +237,43 @@ export class TeamMembersComponent implements OnInit {
       photoFile: null,
       photoPreview: '',
     };
+  }
+
+  private getEditValidationMessage(editingUser: TeamMember): string {
+    const username = this.editForm.username.trim().toLowerCase();
+    const email = this.editForm.email.trim().toLowerCase();
+
+    if (!username || !this.editForm.name.trim() || !email || !this.editForm.role) {
+      return 'Complete username, name, email, and role.';
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return 'Enter a valid email address.';
+    }
+
+    const hasDuplicateUsername = this.users().some(
+      (user) =>
+        String(user.id) !== String(editingUser.id) &&
+        String(user.username || '')
+          .trim()
+          .toLowerCase() === username,
+    );
+    if (hasDuplicateUsername) {
+      return 'Username is already available.';
+    }
+
+    const hasDuplicateEmail = this.users().some(
+      (user) =>
+        String(user.id) !== String(editingUser.id) &&
+        String(user.email || '')
+          .trim()
+          .toLowerCase() === email,
+    );
+    if (hasDuplicateEmail) {
+      return 'Email is already available.';
+    }
+
+    return '';
   }
 
   private revokePreview(preview: string): void {

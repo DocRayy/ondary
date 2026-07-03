@@ -1,6 +1,8 @@
 <section class="space-y-6 pr-0 lg:pr-8">
   <div class="flex flex-wrap items-center gap-4">
-    <div class="flex max-w-full overflow-x-auto rounded-full bg-[#1E293B] p-1 text-sm font-semibold text-tertiary-400">
+    <div
+      class="flex max-w-full overflow-x-auto rounded-full bg-[#1E293B] p-1 text-sm font-semibold text-tertiary-400"
+    >
       <button
         *ngFor="let tab of viewTabs"
         type="button"
@@ -14,99 +16,39 @@
     </div>
 
     <div class="ml-0 flex w-full flex-wrap items-center gap-3 sm:ml-auto sm:w-auto">
-      <div class="relative w-full sm:w-56" (click)="$event.stopPropagation()">
-        <button
-          type="button"
-          class="flex h-10 w-full items-center justify-between gap-2 rounded-full border border-tertiary-200 bg-tertiary-100 px-4 text-left text-sm font-semibold text-tertiary-800 outline-none transition hover:border-tertiary-300 disabled:cursor-not-allowed disabled:opacity-70"
-          aria-haspopup="listbox"
-          [attr.aria-expanded]="isProjectComboboxOpen"
-          [disabled]="isLoadingProjects"
-          (click)="toggleProjectCombobox()"
-        >
-          <span class="flex min-w-0 items-center gap-2">
-            <img
-              *ngIf="getProjectPhoto(selectedProject) as selectedProjectPhoto; else selectedProjectInitial"
-              [src]="selectedProjectPhoto"
-              [alt]="getProjectName(selectedProject)"
-              class="h-6 w-6 shrink-0 rounded-full object-cover"
-            />
-            <ng-template #selectedProjectInitial>
-              <span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#1E293B] text-2xs font-bold text-white">
-                {{ getProjectInitial(selectedProject) }}
-              </span>
-            </ng-template>
-            <span class="truncate">
-              {{ isLoadingProjects ? 'Loading...' : getProjectName(selectedProject) }}
-            </span>
-          </span>
-          <span class="shrink-0 text-xs">v</span>
-        </button>
-
-        <div
-          *ngIf="isProjectComboboxOpen"
-          class="absolute left-0 z-30 mt-2 max-h-72 w-full overflow-auto rounded-2xl bg-[#1E293B] p-2 text-sm text-white shadow-xl"
-          role="listbox"
-          aria-label="Projects"
-        >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
-            role="option"
-            [attr.aria-selected]="!selectedProjectId"
-            (click)="selectProject(null)"
-          >
-            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-100 text-2xs font-bold text-tertiary-950">
-              A
-            </span>
-            <span class="truncate font-semibold">All Projects</span>
-          </button>
-          <div
-            *ngIf="isLoadingProjects"
-            class="px-3 py-3 text-center text-xs font-semibold text-tertiary-300"
-          >
-            Loading...
-          </div>
-          <div
-            *ngIf="!isLoadingProjects && !projects.length"
-            class="px-3 py-3 text-center text-xs font-semibold text-tertiary-300"
-          >
-            No projects found.
-          </div>
-          <button
-            *ngFor="let project of projects; trackBy: trackProjectById"
-            type="button"
-            class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
-            role="option"
-            [attr.aria-selected]="selectedProjectId === project.id.toString()"
-            (click)="selectProject(project)"
-          >
-            <img
-              *ngIf="getProjectPhoto(project) as projectPhoto; else projectInitial"
-              [src]="projectPhoto"
-              [alt]="getProjectName(project)"
-              class="h-7 w-7 shrink-0 rounded-full object-cover"
-            />
-            <ng-template #projectInitial>
-              <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-100 text-2xs font-bold text-tertiary-950">
-                {{ getProjectInitial(project) }}
-              </span>
-            </ng-template>
-            <span class="truncate font-semibold">{{ getProjectName(project) }}</span>
-          </button>
-        </div>
+      <div class="w-full sm:w-56">
+        <app-dropdown-select
+          ariaLabel="Select project"
+          [options]="getProjectSelectOptions()"
+          [value]="selectedProjectId || null"
+          [loading]="isLoadingProjects"
+          [showAvatar]="true"
+          (valueChange)="onSelectedProjectDropdownChange($event)"
+        />
       </div>
 
-      <select
-        *ngIf="isManager"
-        [(ngModel)]="selectedUserId"
-        (ngModelChange)="onSelectedUserChange($event)"
-        class="h-10 w-full rounded-full border border-tertiary-200 bg-tertiary-100 px-4 text-sm font-semibold text-tertiary-800 outline-none sm:w-auto"
+      <div *ngIf="isManager" class="w-full sm:w-56">
+        <app-dropdown-select
+          ariaLabel="Select user"
+          [options]="getUserSelectOptions()"
+          [value]="selectedUserId || null"
+          [showAvatar]="true"
+          (valueChange)="onSelectedUserDropdownChange($event)"
+        />
+      </div>
+      <button
+        *ngIf="activeView === 'board'"
+        type="button"
+        class="flex w-full items-center justify-center gap-2 rounded-full border border-tertiary-200 px-4 py-2 text-sm font-semibold shadow-sm transition hover:border-tertiary-300 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+        [class.bg-tertiary-300]="isRecentlyUpdatedMode"
+        [class.text-tertiary-900]="isRecentlyUpdatedMode"
+        [class.bg-tertiary-100]="!isRecentlyUpdatedMode"
+        [class.text-tertiary-700]="!isRecentlyUpdatedMode"
+        [disabled]="isLoadingTasks"
+        (click)="toggleRecentlyUpdatedMode()"
       >
-        <option value="">All users</option>
-        <option *ngFor="let user of users" [value]="user.id">
-          {{ user.name || user.username || user.email }}
-        </option>
-      </select>
+        Recently Updated
+      </button>
       <button
         *ngIf="activeView === 'board' && !isManager"
         type="button"
@@ -162,7 +104,14 @@
     *ngIf="activeView === 'board' && taskErrorMessage"
     class="rounded-2xl bg-red-50 px-5 py-4 text-sm font-semibold text-red-700"
   >
-    {{ taskErrorMessage }}
+    <p>{{ taskErrorMessage }}</p>
+    <button
+      type="button"
+      class="mt-3 rounded-md bg-red-100 px-4 py-2 text-xs font-bold text-red-800 transition hover:bg-red-200"
+      (click)="reloadTasks()"
+    >
+      Reload
+    </button>
   </div>
 
   <div
@@ -227,7 +176,9 @@
                 class="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-white/30"
               />
               <ng-template #cardProjectInitial>
-                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-100 text-2xs font-bold text-tertiary-950 ring-1 ring-white/30">
+                <span
+                  class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-100 text-2xs font-bold text-tertiary-950 ring-1 ring-white/30"
+                >
                   {{ getProjectInitial(project) }}
                 </span>
               </ng-template>
@@ -282,13 +233,18 @@
         <div
           class="flex flex-1 items-center justify-center text-sm font-semibold text-tertiary-500"
         >
-          {{ column.emptyText }}
+          {{ getBoardEmptyText(column) }}
         </div>
       </ng-template>
     </div>
   </div>
 
-  <div *ngIf="activeView === 'timelog'" class="overflow-x-auto rounded-3xl py-6">
+  <div
+    *ngIf="activeView === 'timelog'"
+    data-timelog-container
+    class="relative overflow-visible rounded-3xl py-6"
+  >
+    <div data-timelog-scroll class="overflow-x-auto overflow-y-visible">
     <div *ngIf="isLoadingTimelogs" class="rounded-3xl bg-tertiary-50 py-6 px-6 space-y-6">
       <div class="flex items-center gap-6">
         <div class="w-[260px] shrink-0 h-4 rounded-full bg-tertiary-200 animate-pulse"></div>
@@ -348,7 +304,9 @@
             class="h-7 w-7 shrink-0 rounded-full object-cover"
           />
           <ng-template #timelineAvatarFallback>
-            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-200 text-xs font-extrabold text-tertiary-950">
+            <span
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-200 text-xs font-extrabold text-tertiary-950"
+            >
               {{ user.name.charAt(0).toUpperCase() }}
             </span>
           </ng-template>
@@ -356,6 +314,7 @@
         </div>
 
         <div
+          data-timelog-row
           class="relative min-w-[760px] flex-1"
           [style.height.px]="getTimelogRowHeight(user)"
         >
@@ -369,11 +328,13 @@
 
           <div
             *ngFor="let log of user.logs; trackBy: trackTimelogById"
-            class="absolute h-8 overflow-hidden rounded-full bg-[#1E293B] px-4 py-1.5 text-sm font-semibold text-white shadow-sm"
+            data-timelog-bar
+            class="absolute h-8 cursor-pointer overflow-hidden rounded-full bg-[#1E293B] px-4 py-1.5 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-primary-500"
             [style.left.%]="log.left"
             [style.width.%]="log.width"
             [style.top.px]="log.lane * 42 + 8"
             [title]="log.label"
+            (click)="openTimelogPopover(log, user, $event)"
           >
             <span class="block truncate pr-12">{{ log.label }}</span>
             <span *ngIf="log.files.length" class="absolute right-2 top-1 flex gap-1">
@@ -381,7 +342,10 @@
                 *ngFor="let file of log.files.slice(0, 2); trackBy: trackTimelogFileById"
                 type="button"
                 class="h-6 w-6 overflow-hidden rounded-full bg-tertiary-200"
-                (click)="openImagePreview(getTimelogFilePhoto(file), file.note || log.label); $event.stopPropagation()"
+                (click)="
+                  openImagePreview(getTimelogFilePhoto(file), file.note || log.label);
+                  $event.stopPropagation()
+                "
               >
                 <img
                   *ngIf="getTimelogFilePhoto(file) as filePhoto; else timelineFileFallback"
@@ -395,7 +359,29 @@
               </button>
             </span>
           </div>
+
         </div>
+      </div>
+    </div>
+
+    <div
+      *ngIf="activeTimelogPopover as popover"
+      data-timelog-popover
+      class="absolute z-50 w-[220px] rounded-lg bg-white px-4 py-3 text-xs text-black shadow-2xl ring-1 ring-black/10"
+      [style.top.px]="popover.top"
+      [style.left.px]="popover.left"
+      (click)="$event.stopPropagation()"
+    >
+      <p class="truncate text-sm font-extrabold">{{ popover.log.label }}</p>
+      <div class="mt-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2">
+        <span class="font-semibold text-neutral-500">Start task</span>
+        <span class="font-bold">{{ getTimelogPopoverStart(popover.log) }}</span>
+        <span class="font-semibold text-neutral-500">Time spend</span>
+        <span class="font-bold">{{ getTimelogPopoverDuration(popover.log) }}</span>
+        <span class="font-semibold text-neutral-500">End task</span>
+        <span class="font-bold">{{ getTimelogPopoverEnd(popover.log) }}</span>
+        <span class="font-semibold text-neutral-500">Status</span>
+        <span class="font-bold">{{ getTimelogPopoverStatus(popover.log) }}</span>
       </div>
     </div>
 
@@ -404,6 +390,7 @@
       class="mx-6 mt-4 rounded-2xl bg-tertiary-100 px-5 py-4 text-sm font-semibold text-tertiary-600"
     >
       No timelogs found.
+    </div>
     </div>
   </div>
 
@@ -473,16 +460,44 @@
         <p class="text-base font-semibold text-white">Upcoming</p>
       </div>
       <div class="mt-4 space-y-4">
-        <article
-          *ngFor="let task of upcomingTasks; trackBy: trackUpcomingTodoById"
-          class="cursor-pointer rounded-2xl bg-tertiary-200 px-4 py-4 text-sm font-semibold text-black transition hover:bg-tertiary-300"
-          (click)="openCalendarTask(task.task)"
-        >
-          <p>{{ task.title }}</p>
-          <p class="mt-3 text-xs font-semibold text-tertiary-600">{{ task.date }}</p>
-        </article>
+        <div *ngIf="isManager; else memberUpcomingTodos" class="space-y-2">
+          <app-upcoming-user-separator
+            *ngFor="let group of upcomingTodoGroups; trackBy: trackUpcomingGroupByUser"
+            [name]="getUserLabel(group.user, group.user.id)"
+            [photo]="getUserPhoto(group.user)"
+            [initial]="getUserInitialOption(group.user, group.user.id)"
+            [count]="group.todos.length"
+            [expanded]="group.expanded"
+            (toggle)="toggleUpcomingGroup(group)"
+          >
+            <article
+              *ngFor="let task of group.todos; trackBy: trackUpcomingTodoById"
+              class="cursor-pointer rounded-lg bg-white/80 px-3 py-3 text-sm font-semibold text-black transition hover:bg-white"
+              (click)="openUpcomingTodo(task)"
+            >
+              <p>{{ task.title }}</p>
+              <p class="mt-2 text-xs font-semibold text-tertiary-600">
+                {{ task.project }} · {{ task.date }}
+              </p>
+            </article>
+          </app-upcoming-user-separator>
+        </div>
+
+        <ng-template #memberUpcomingTodos>
+          <article
+            *ngFor="let task of upcomingTasks; trackBy: trackUpcomingTodoById"
+            class="cursor-pointer rounded-2xl bg-tertiary-200 px-4 py-4 text-sm font-semibold text-black transition hover:bg-tertiary-300"
+            (click)="openUpcomingTodo(task)"
+          >
+            <p>{{ task.title }}</p>
+            <p class="mt-2 text-xs font-semibold text-tertiary-600">
+              {{ task.project }} · {{ task.date }}
+            </p>
+          </article>
+        </ng-template>
+
         <div
-          *ngIf="!upcomingTasks.length"
+          *ngIf="(!isManager && !upcomingTasks.length) || (isManager && !upcomingTodoGroups.length)"
           class="rounded-2xl bg-tertiary-200 px-4 py-4 text-sm font-semibold text-black"
         >
           No upcoming task todos.

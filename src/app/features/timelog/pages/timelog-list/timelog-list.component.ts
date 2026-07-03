@@ -6,7 +6,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 import { FcIconComponent } from '../../../../shared/components/fc-icon/fc-icon.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
-import { getApiMediaUrl } from '../../../../shared/utils/media';
+import { getApiMediaUrl, getFirstMediaUrl } from '../../../../shared/utils/media';
 import {
   CreateTimelogRequest,
   TimelogFileRecord,
@@ -20,7 +20,8 @@ interface TimelogItem {
   record: TimelogRecord;
   title: string;
   user: string;
-  userPhoto: string;
+  userPhoto: string | null;
+  userInitial: string;
   displayName: string;
   startTime: string;
   endTime: string;
@@ -38,12 +39,7 @@ interface ActiveTimelog {
 @Component({
   selector: 'app-timelog-list',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    FcIconComponent,
-    GsapModalDirective,
-  ],
+  imports: [CommonModule, FormsModule, FcIconComponent, GsapModalDirective],
   templateUrl: './timelog-list.component.html',
 })
 export class TimelogListComponent implements OnInit, OnDestroy {
@@ -74,6 +70,10 @@ export class TimelogListComponent implements OnInit, OnDestroy {
     this.timelogEndedSubscription = this.activeTimelogService.timelogEnded$.subscribe(() => {
       this.loadTimelogs();
     });
+  }
+
+  reloadTimelogs(): void {
+    this.loadTimelogs();
   }
 
   ngOnDestroy(): void {
@@ -273,10 +273,14 @@ export class TimelogListComponent implements OnInit, OnDestroy {
       title: record.name || `Timelog #${record.id ?? '-'}`,
       user: record.user?.username || record.user?.name || `User #${record.user_id ?? '-'}`,
       userPhoto: this.getTimelogUserPhoto(record),
+      userInitial: this.getInitial(this.getTimelogUserName(record)),
       displayName: this.getTimelogUserName(record),
       startTime: this.formatTime(record.start),
       endTime: isActive || !record.end ? '-' : this.formatTime(record.end),
-      duration: isActive || !record.end ? this.formatElapsed(record.start) : this.formatMinutes(durationMinutes),
+      duration:
+        isActive || !record.end
+          ? this.formatElapsed(record.start)
+          : this.formatMinutes(durationMinutes),
       status: this.getTimelogStatusLabel(record),
       files: this.getTimelogFiles(record),
       attachments: this.getTimelogFiles(record).length,
@@ -291,11 +295,13 @@ export class TimelogListComponent implements OnInit, OnDestroy {
     return record.user?.username || record.user?.name || `User #${record.user_id ?? '-'}`;
   }
 
-  private getTimelogUserPhoto(record: TimelogRecord): string {
+  private getTimelogUserPhoto(record: TimelogRecord): string | null {
     const user = record.user;
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
+    return getFirstMediaUrl(user);
+  }
 
-    return getApiMediaUrl(photo) || 'images/home-user.png';
+  private getInitial(value: string | number | undefined): string {
+    return String(value ?? '?').trim().slice(0, 1).toUpperCase() || '?';
   }
 
   private getTimelogFiles(record: TimelogRecord): TimelogFileRecord[] {
@@ -330,6 +336,15 @@ export class TimelogListComponent implements OnInit, OnDestroy {
 
   private startElapsedTimer(): void {
     this.elapsedTimerId = setInterval(() => {
+      this.timelogs = this.timelogs.map((item) =>
+        this.isActiveStatus(item.record.status) || !item.record.end
+          ? {
+              ...item,
+              duration: this.formatElapsed(item.record.start),
+            }
+          : item,
+      );
+
       if (!this.activeTimelog) {
         return;
       }

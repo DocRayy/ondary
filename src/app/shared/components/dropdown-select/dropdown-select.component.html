@@ -1,0 +1,68 @@
+<div class="relative w-full">
+  <button
+    type="button"
+    [class]="buttonClass"
+    aria-haspopup="listbox"
+    [attr.aria-label]="ariaLabel"
+    [attr.aria-expanded]="isOpen"
+    (click)="toggle($event)"
+  >
+    <span class="flex min-w-0 items-center gap-2">
+      <ng-container *ngIf="showAvatar">
+        <img
+          *ngIf="selectedOption.imageUrl; else selectedInitial"
+          [src]="selectedOption.imageUrl"
+          [alt]="selectedOption.label"
+          class="h-6 w-6 shrink-0 rounded-full object-cover"
+        />
+        <ng-template #selectedInitial>
+          <span
+            class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#1E293B] text-2xs font-bold text-white"
+          >
+            {{ getOptionInitial(selectedOption) }}
+          </span>
+        </ng-template>
+      </ng-container>
+      <span class="truncate">{{ selectedOption.label }}</span>
+    </span>
+    <fc-icon icon="caret-down-linear" class="shrink-0 text-xs"></fc-icon>
+  </button>
+
+  <div *ngIf="isOpen" [class]="menuClass" role="listbox" [attr.aria-label]="ariaLabel">
+    <button
+      *ngFor="let option of options; trackBy: trackOptionByValue"
+      type="button"
+      class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-white/10"
+      role="option"
+      [attr.aria-selected]="isSelected(option)"
+      (click)="select(option, $event)"
+    >
+      <ng-container *ngIf="showAvatar">
+        <img
+          *ngIf="option.imageUrl; else optionInitial"
+          [src]="option.imageUrl"
+          [alt]="option.label"
+          class="h-7 w-7 shrink-0 rounded-full object-cover"
+        />
+        <ng-template #optionInitial>
+          <span
+            class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-tertiary-100 text-2xs font-bold text-tertiary-950"
+          >
+            {{ getOptionInitial(option) }}
+          </span>
+        </ng-template>
+      </ng-container>
+      <span class="truncate font-semibold">{{ option.label }}</span>
+    </button>
+
+    <div *ngIf="loading" class="px-3 py-3 text-center text-xs font-semibold text-tertiary-300">
+      {{ loadingLabel }}
+    </div>
+    <div
+      *ngIf="!loading && !options.length"
+      class="px-3 py-3 text-center text-xs font-semibold text-tertiary-300"
+    >
+      {{ emptyLabel }}
+    </div>
+  </div>
+</div>

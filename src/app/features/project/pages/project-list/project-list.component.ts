@@ -8,7 +8,11 @@ import { ConfirmationModalComponent } from '../../../../shared/components/confir
 import { ImageCropperComponent } from '../../../../shared/components/image-cropper/image-cropper.component';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
 import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
-import { getApiMediaUrl, imageAcceptAttribute, isAllowedImageFile } from '../../../../shared/utils/media';
+import {
+  getFirstMediaUrl,
+  imageAcceptAttribute,
+  isAllowedImageFile,
+} from '../../../../shared/utils/media';
 import { ProjectRecord } from '../../schema/project.schema';
 import { ProjectService } from '../../service/project.service';
 
@@ -117,7 +121,7 @@ export class ProjectListComponent implements OnInit {
       input.value = '';
       this.formPhotoFile = null;
       this.formCropFile = null;
-      this.errorMessage.set('Upload photo hanya boleh jpg, jpeg, png, webp, atau gif.');
+      this.errorMessage.set('Photo upload only supports jpg, jpeg, png, webp, or gif.');
       return;
     }
 
@@ -141,6 +145,17 @@ export class ProjectListComponent implements OnInit {
   saveProject(): void {
     const label = this.formLabel.trim();
     if (!label) {
+      this.errorMessage.set('Project name is required.');
+      return;
+    }
+
+    const duplicateProject = this.projects().some(
+      (project) =>
+        String(project.id) !== String(this.editingProject()?.id) &&
+        this.getProjectLabel(project).trim().toLowerCase() === label.toLowerCase(),
+    );
+    if (duplicateProject) {
+      this.errorMessage.set('Project name is already available.');
       return;
     }
 
@@ -148,6 +163,7 @@ export class ProjectListComponent implements OnInit {
     const payload = this.createProjectFormData(label);
 
     this.savingProject.set(true);
+    this.errorMessage.set('');
 
     const request = editingProject?.id
       ? this.projectService.updateProject(editingProject.id, payload)
@@ -221,7 +237,7 @@ export class ProjectListComponent implements OnInit {
   }
 
   getProjectPhoto(project: ProjectRecord): string | null {
-    return getApiMediaUrl(project.photo);
+    return getFirstMediaUrl(project);
   }
 
   getProjectTaskCount(project: ProjectRecord): number {

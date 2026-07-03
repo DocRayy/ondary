@@ -11,5 +11,5 @@ export const roleGuard: CanActivateChildFn = (route) => {
     return true;
   }
 
-  return router.createUrlTree(['/']);
+  return router.createUrlTree([permission.getDefaultRoute()]);
 };

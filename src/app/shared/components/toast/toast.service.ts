@@ -43,14 +43,23 @@ export class ToastService {
     return this.getApiMessage(this.getErrorSource(error), 'Error', fallback).message;
   }
 
-  getApiMessage(source: unknown, fallbackTitle: ToastType | 'Success' | 'Error', fallbackMessage = '') {
-    const title = fallbackTitle === 'success' ? 'Success' : fallbackTitle === 'error' ? 'Error' : fallbackTitle;
+  getApiMessage(
+    source: unknown,
+    fallbackTitle: ToastType | 'Success' | 'Error',
+    fallbackMessage = '',
+  ) {
+    const title =
+      fallbackTitle === 'success' ? 'Success' : fallbackTitle === 'error' ? 'Error' : fallbackTitle;
 
     if (this.isRecord(source)) {
       const sourceTitle = source['title'] ?? source['__apiTitle'];
       const sourceMessage = source['message'] ?? source['__apiMessage'];
 
-      if (typeof sourceTitle === 'string' || typeof sourceMessage === 'string' || Array.isArray(sourceMessage)) {
+      if (
+        typeof sourceTitle === 'string' ||
+        typeof sourceMessage === 'string' ||
+        Array.isArray(sourceMessage)
+      ) {
         return {
           title: typeof sourceTitle === 'string' && sourceTitle.trim() ? sourceTitle : title,
           message: this.normalizeMessage(sourceMessage) || fallbackMessage || title,
@@ -61,7 +70,11 @@ export class ToastService {
       if (this.isRecord(data)) {
         const dataTitle = data['title'];
         const dataMessage = data['message'];
-        if (typeof dataTitle === 'string' || typeof dataMessage === 'string' || Array.isArray(dataMessage)) {
+        if (
+          typeof dataTitle === 'string' ||
+          typeof dataMessage === 'string' ||
+          Array.isArray(dataMessage)
+        ) {
           return {
             title: typeof dataTitle === 'string' && dataTitle.trim() ? dataTitle : title,
             message: this.normalizeMessage(dataMessage) || fallbackMessage || title,

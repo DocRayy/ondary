@@ -1,19 +1,11 @@
-const {
-  app,
-  BrowserWindow,
-  Menu,
-  ipcMain,
-  globalShortcut,
-} = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const remoteMain = require('@electron/remote/main');
 const { screen } = require('electron');
 
 // web host
 const host =
-  process.env.NODE_ENV === 'production'
-    ? 'http://localhost:4200'
-    : 'http://localhost:4201';
+  process.env.NODE_ENV === 'production' ? 'http://localhost:4200' : 'http://localhost:4201';
 
 remoteMain.initialize();
 
@@ -77,8 +69,7 @@ ipcMain.on('window-size', (event, windowName, width, height, position) => {
   const win = getOrCreateWindow(windowName);
 
   if (win) {
-    const { width: maxWidth, height: maxHeight } =
-      screen.getPrimaryDisplay().workAreaSize;
+    const { width: maxWidth, height: maxHeight } = screen.getPrimaryDisplay().workAreaSize;
     const halfWidth = Math.floor(maxWidth / 2);
     const halfHeight = Math.floor(maxHeight / 2);
 

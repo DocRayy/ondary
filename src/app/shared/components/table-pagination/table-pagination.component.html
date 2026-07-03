@@ -1,0 +1,51 @@
+<div class="flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+  <div class="w-full sm:w-36">
+    <app-dropdown-select
+      ariaLabel="Select rows per page"
+      [options]="limitOptions"
+      [value]="meta.limit"
+      [buttonClass]="'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-white/15 bg-primary-900/60 px-3 text-left text-xs font-bold text-white outline-none transition hover:border-white/30'"
+      (valueChange)="selectLimit($event)"
+    />
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+    <button
+      type="button"
+      class="grid h-8 w-8 place-items-center rounded-lg border border-white/15 text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+      [disabled]="isFirstPage"
+      aria-label="Previous page"
+      (click)="goToPage(meta.page - 1)"
+    >
+      <fc-icon icon="previous-linear" class="text-sm"></fc-icon>
+    </button>
+
+    <button
+      *ngFor="let page of pages"
+      type="button"
+      class="h-8 min-w-8 rounded-lg border px-2 text-xs font-extrabold transition"
+      [ngClass]="
+        page === meta.page
+          ? 'border-tertiary-100 bg-tertiary-100 text-tertiary-950'
+          : 'border-white/15 text-white hover:bg-white/10'
+      "
+      (click)="goToPage(page)"
+    >
+      {{ page }}
+    </button>
+
+    <span *ngIf="pages[pages.length - 1] < meta.page_count" class="px-1 text-xs font-bold text-white/60">
+      ...
+    </span>
+
+    <button
+      type="button"
+      class="grid h-8 w-8 place-items-center rounded-lg border border-white/15 text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+      [disabled]="isLastPage"
+      aria-label="Next page"
+      (click)="goToPage(meta.page + 1)"
+    >
+      <fc-icon icon="next-linear" class="text-sm"></fc-icon>
+    </button>
+  </div>
+</div>

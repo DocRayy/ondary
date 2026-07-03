@@ -19,15 +19,43 @@
       placeholder="Search user"
       [ngModel]="searchTerm()"
       (ngModelChange)="searchTerm.set($event)"
-      class="ml-0 h-12 w-full rounded-xl border-0 bg-tertiary-100 px-5 text-sm font-bold text-black outline-none placeholder:text-black sm:ml-auto sm:w-60"
+      class="ondary-form-input text-white ml-0 w-full sm:ml-auto sm:w-60"
     />
   </div>
 
+  <div *ngIf="isLoading()" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+    <article
+      *ngFor="let item of [1, 2, 3, 4]"
+      class="overflow-hidden rounded-xl border border-tertiary-200 bg-tertiary-50"
+    >
+      <div class="h-[300px] bg-tertiary-200 animate-pulse"></div>
+      <div class="space-y-3 px-4 py-4">
+        <div class="h-4 w-32 rounded-full bg-tertiary-300 animate-pulse"></div>
+        <div class="flex items-center gap-2">
+          <div class="h-3 w-20 rounded-full bg-tertiary-200 animate-pulse"></div>
+          <div class="h-2 w-2 rounded-full bg-tertiary-200 animate-pulse"></div>
+          <div class="h-3 w-16 rounded-full bg-tertiary-200 animate-pulse"></div>
+        </div>
+        <div *ngIf="canManageMembers" class="flex gap-2">
+          <div class="h-8 w-16 rounded-lg bg-tertiary-200 animate-pulse"></div>
+          <div class="h-8 w-20 rounded-lg bg-red-50 animate-pulse"></div>
+        </div>
+      </div>
+    </article>
+  </div>
+
   <div
-    *ngIf="isLoading()"
-    class="rounded-xl bg-tertiary-100 px-5 py-4 text-sm font-bold text-tertiary-700"
+    *ngIf="!isLoading() && errorMessage() && !editingUser()"
+    class="rounded-xl bg-red-50 px-5 py-4 text-sm font-bold text-red-700"
   >
-    Loading team members...
+    <p>{{ errorMessage() }}</p>
+    <button
+      type="button"
+      class="mt-3 rounded-md bg-red-100 px-4 py-2 text-xs font-bold text-red-800 transition hover:bg-red-200"
+      (click)="reloadUsers()"
+    >
+      Reload
+    </button>
   </div>
 
   <div
@@ -101,9 +129,9 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
     role="presentation"
     (click)="closeEditUser()"
-  >
+    >
     <form
-      class="max-h-[calc(100vh-32px)] w-[min(760px,calc(100vw-32px))] overflow-y-auto rounded-xl bg-white p-6 text-black shadow-2xl"
+      class="ondary-dialog-panel max-h-[calc(100vh-32px)] w-[min(760px,calc(100vw-32px))] overflow-y-auto rounded-xl p-6"
       role="dialog"
       aria-modal="true"
       (click)="$event.stopPropagation()"
@@ -112,7 +140,7 @@
       <header class="flex items-center gap-3">
         <button
           type="button"
-          class="grid h-8 w-8 place-items-center rounded-full bg-[#D9D9D9] text-black"
+          class="grid h-8 w-8 place-items-center rounded-full bg-[#d9d9d9] text-black"
           aria-label="Close"
           (click)="closeEditUser()"
         >
@@ -123,7 +151,9 @@
 
       <div class="mt-6 grid gap-6 md:grid-cols-[96px_minmax(0,1fr)]">
         <div class="space-y-2">
-          <div class="grid h-24 w-24 place-items-center overflow-hidden rounded-md bg-[#D9D9D9] text-[#2E2E34]">
+          <div
+            class="grid h-24 w-24 place-items-center overflow-hidden rounded-md bg-[#d9d9d9] text-[#2e2e34]"
+          >
             <img
               *ngIf="editForm.photoPreview; else editPhotoPlaceholder"
               [src]="editForm.photoPreview"
@@ -134,7 +164,9 @@
               <fc-icon icon="user-linear" class="text-5xl"></fc-icon>
             </ng-template>
           </div>
-          <label class="grid h-8 w-24 cursor-pointer place-items-center rounded-md bg-[#D9D9D9] text-2xs font-bold text-black">
+          <label
+            class="grid h-8 w-24 cursor-pointer place-items-center rounded-md bg-[#d9d9d9] text-2xs font-bold text-black transition hover:bg-gray-200"
+          >
             Upload Photo
             <input
               type="file"
@@ -152,7 +184,7 @@
             type="text"
             required
             placeholder="Username"
-            class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+            class="ondary-form-input"
           />
           <input
             name="editName"
@@ -160,7 +192,7 @@
             type="text"
             required
             placeholder="Name"
-            class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+            class="ondary-form-input"
           />
           <input
             name="editEmail"
@@ -168,30 +200,33 @@
             type="email"
             required
             placeholder="Email"
-            class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+            class="ondary-form-input"
           />
           <input
             name="editPassword"
             [(ngModel)]="editForm.password"
             type="password"
             placeholder="Password"
-            class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+            class="ondary-form-input"
           />
           <select
             name="editRole"
             [(ngModel)]="editForm.role"
             required
-            class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none"
+            class="ondary-form-input"
           >
             <option *ngFor="let role of roles" [value]="role">{{ role }}</option>
           </select>
           <button
             type="submit"
             [disabled]="!!updatingId()"
-            class="mt-3 h-14 rounded-md bg-[#D9D9D9] text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-70"
+            class="ondary-form-button mt-3"
           >
             {{ updatingId() ? 'Submitting...' : 'Submit' }}
           </button>
+          <p *ngIf="errorMessage()" class="text-xs font-bold text-red-300">
+            {{ errorMessage() }}
+          </p>
         </div>
       </div>
     </form>

@@ -21,7 +21,8 @@ export interface ManagerNoteRecord {
 }
 
 export interface CreateManagerNoteRequest {
-  user_id: number;
+  user_id?: number;
+  send_to_all?: boolean;
   title: string;
   description?: string;
 }
@@ -83,13 +84,9 @@ export class ManagerNoteService {
     }
 
     return this.http
-      .patch<ApiItemResponse<ManagerNoteRecord>>(
-        `${this.apiUrl}/manager-notes/${id}`,
-        payload,
-        {
-          headers: this.createAuthHeaders(),
-        },
-      )
+      .patch<ApiItemResponse<ManagerNoteRecord>>(`${this.apiUrl}/manager-notes/${id}`, payload, {
+        headers: this.createAuthHeaders(),
+      })
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
@@ -99,9 +96,12 @@ export class ManagerNoteService {
       return throwError(() => createInvalidApiIdError('manager note id'));
     }
 
-    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/manager-notes/${id}`, {
-      headers: this.createAuthHeaders(),
-    });
+    return this.http.delete<{ title?: string; message?: string }>(
+      `${this.apiUrl}/manager-notes/${id}`,
+      {
+        headers: this.createAuthHeaders(),
+      },
+    );
   }
 
   private normalizeCollection<T>(response: ApiCollectionResponse<T>): T[] {

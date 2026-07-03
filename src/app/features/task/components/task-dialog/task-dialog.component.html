@@ -13,14 +13,21 @@
   >
     <header class="flex items-start justify-between gap-6 max-md:flex-col max-md:items-stretch">
       <div class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-        <input
-          type="text"
-          maxlength="150"
-          [(ngModel)]="form.title"
-          [readonly]="isReadonly"
-          class="fc-unstyled-input min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-extrabold leading-tight text-white outline-none sm:min-w-60"
-          aria-label="Task title"
-        />
+        <div class="flex min-w-0 flex-1 items-center gap-1 sm:min-w-60">
+          <input
+            type="text"
+            maxlength="150"
+            [(ngModel)]="form.title"
+            [readonly]="isReadonly"
+            class="fc-unstyled-input min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-extrabold leading-tight text-white caret-white outline-none"
+            aria-label="Task title"
+          />
+          <span
+            *ngIf="!isReadonly"
+            class="h-7 w-0.5 shrink-0 animate-pulse rounded-full bg-white/80"
+            aria-hidden="true"
+          ></span>
+        </div>
         <span
           *ngFor="let label of selectedLabels"
           class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1"
@@ -122,7 +129,10 @@
             <span class="flex min-w-0 items-center gap-2">
               <ng-container *ngIf="selectedProject">
                 <img
-                  *ngIf="getProjectPhoto(selectedProject) as selectedProjectPhoto; else selectedProjectInitial"
+                  *ngIf="
+                    getProjectPhoto(selectedProject) as selectedProjectPhoto;
+                    else selectedProjectInitial
+                  "
                   [src]="selectedProjectPhoto"
                   [alt]="getProjectName(selectedProject)"
                   class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -242,170 +252,471 @@
       class="mt-7 h-[108px] w-full resize-none rounded-md border-0 bg-[#d9d9d9] px-7 py-3 text-xs text-black outline-none placeholder:text-neutral-700"
     ></textarea>
 
-    <div class="relative mt-6 flex flex-wrap items-center gap-4 text-sm text-white">
-      <strong>Todo</strong>
-      <button
-        type="button"
-        class="h-[30px] w-[146px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
-        [disabled]="isReadonly"
-        (click)="openTodoDialog()"
-      >
-        + Add task todo
-      </button>
+    <div class="mt-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="h-[34px] rounded-md border-0 bg-[#d9d9d9] px-4 text-xs font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-70"
+          [disabled]="isReadonly"
+          (click)="openAttachmentDialog()"
+        >
+          + Add files
+        </button>
+        <span class="text-xs font-semibold text-white/80">Max 10MB per file</span>
+      </div>
 
-      <div
-        *ngIf="isTodoDialogOpen"
-        class="absolute left-0 top-9 z-20 w-[min(420px,calc(100vw-48px))] rounded-lg bg-primary-300 p-4 text-white shadow-2xl md:left-[58px]"
-        (click)="$event.stopPropagation()"
-      >
-        <label class="block text-xs font-bold text-white">
-          Title task todo
-          <input
-            type="text"
-            [(ngModel)]="todoForm.label"
-            class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
-            placeholder="Task todo title"
-          />
-        </label>
-
-        <label class="mt-4 block text-xs font-bold text-white">
-          Assign user
-          <select
-            [(ngModel)]="todoForm.user"
-            class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
+      <div *ngIf="attachments.length" class="mt-3 flex flex-wrap gap-3">
+        <button
+          *ngFor="let attachment of attachments"
+          type="button"
+          class="relative flex h-24 w-24 flex-col items-center justify-center gap-2 rounded-md border border-white/20 bg-primary-200 px-2 text-center text-white transition hover:bg-primary-300"
+          (click)="openAttachmentViewer(attachment)"
+        >
+          <span
+            *ngIf="!isReadonly"
+            role="button"
+            tabindex="0"
+            aria-label="Remove attachment"
+            class="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-white text-primary-950 shadow-sm transition hover:bg-red-100 hover:text-red-700"
+            (click)="removeAttachment(attachment, $event)"
+            (keydown.enter)="removeAttachment(attachment, $event)"
+            (keydown.space)="removeAttachment(attachment, $event)"
           >
-            <option [ngValue]="undefined">
-              {{ isLoadingUsers ? 'Loading users...' : 'Select user' }}
-            </option>
-            <option *ngFor="let user of getTodoAssignableUsers()" [ngValue]="user">
-              {{ getUserLabel(user) }}
-            </option>
-          </select>
-        </label>
-
-        <p *ngIf="todoErrorMessage" class="mt-3 text-xs font-bold text-red-600">
-          {{ todoErrorMessage }}
-        </p>
-
-        <div class="mt-4 flex justify-end gap-3">
-          <button
-            type="button"
-            class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
-            (click)="closeTodoDialog()"
+            <fc-icon icon="close-linear" class="text-xs"></fc-icon>
+          </span>
+          <span
+            class="grid h-9 w-9 place-items-center rounded-md bg-white text-[10px] font-extrabold text-primary-500"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black disabled:cursor-not-allowed disabled:opacity-70"
-            [disabled]="isAddingTodo"
-            (click)="addTaskTodo()"
-          >
-            {{ isAddingTodo ? 'Adding...' : 'Add' }}
-          </button>
-        </div>
+            {{ getAttachmentIconLabel(attachment) }}
+          </span>
+          <span class="line-clamp-2 max-w-full break-all text-[10px] font-bold">
+            {{ getAttachmentName(attachment) }}
+          </span>
+        </button>
       </div>
     </div>
 
     <div
-      *ngIf="isLoadingTaskTodos"
-      class="mt-4 rounded-lg bg-neutral-100 px-4 py-3 text-xs font-bold text-neutral-600"
+      *ngIf="task?.id"
+      class="mt-6 flex w-fit rounded-md bg-primary-200 p-1 text-xs font-bold text-white"
+      role="tablist"
     >
-      Loading task todos...
-    </div>
-
-    <div class="mt-5 rounded-lg px-4 py-3">
-      <div class="flex items-center justify-between text-xs font-bold text-white">
-        <span>Task progress</span>
-        <span>{{ getTaskProgress() }}%</span>
-      </div>
-      <div class="mt-2 h-2 overflow-hidden rounded-full bg-white">
-        <div class="h-full rounded-full bg-[#2F4156]" [style.width.%]="getTaskProgress()"></div>
-      </div>
-    </div>
-
-    <div *ngIf="taskTodos.length" class="mt-5 max-h-[260px] space-y-4 overflow-y-auto pr-1">
-      <article
-        *ngFor="let todo of taskTodos"
-        class="relative min-h-[172px] rounded-xl border border-[#2F4156] px-5 py-4"
-        [class.ring-2]="isHighlightedTodo(todo)"
-        [class.ring-warning-300]="isHighlightedTodo(todo)"
-        [class.bg-warning-50/10]="isHighlightedTodo(todo)"
+      <button
+        type="button"
+        class="h-8 rounded px-4 transition"
+        [class.bg-white]="activeTab === 'todo'"
+        [class.text-primary-500]="activeTab === 'todo'"
+        (click)="setActiveTab('todo')"
       >
-        <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
-          <span
-            class="grid h-11 w-11 place-items-center overflow-hidden rounded-full bg-primary-200 text-sm font-bold text-white"
+        Task Todo
+      </button>
+      <button
+        type="button"
+        class="h-8 rounded px-4 transition"
+        [class.bg-white]="activeTab === 'comments'"
+        [class.text-primary-500]="activeTab === 'comments'"
+        (click)="setActiveTab('comments')"
+      >
+        Comments
+      </button>
+    </div>
+
+    <div data-task-dialog-tab-panel>
+      <ng-container *ngIf="activeTab === 'todo'">
+        <div class="relative mt-6 flex flex-wrap items-center gap-4 text-sm text-white">
+          <strong>Todo</strong>
+          <button
+            type="button"
+            class="h-[30px] w-[146px] rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
+            [disabled]="isReadonly"
+            (click)="openTodoDialog()"
           >
-            <img
-              *ngIf="getUserPhoto(todo.user) as todoUserPhoto; else todoUserAvatarFallback"
-              [src]="todoUserPhoto"
-              [alt]="getTodoAssigneeLabel(todo)"
-              class="h-full w-full object-cover"
-            />
-            <ng-template #todoUserAvatarFallback>{{ getUserInitial(todo.user) }}</ng-template>
-          </span>
+            + Add task todo
+          </button>
 
-          <div class="min-w-0">
-            <div class="flex items-start gap-4">
-              <div class="min-w-0 max-w-[300px] sm:min-w-[220px]">
-                <h3 class="break-words text-sm font-bold text-white sm:truncate">{{ todo.label }}</h3>
-                <p class="mt-1 text-xs font-bold text-white">{{ getTodoAssigneeLabel(todo) }}</p>
+          <div
+            *ngIf="isTodoDialogOpen"
+            data-task-todo-popper
+            class="absolute left-0 top-9 z-20 w-[min(420px,calc(100vw-48px))] rounded-lg bg-primary-300 p-4 text-white shadow-2xl md:left-[58px]"
+            (click)="$event.stopPropagation()"
+          >
+            <h3 class="mb-4 text-sm font-extrabold text-white">
+              {{ editingTodoClientId !== null ? 'Edit task todo' : 'Add task todo' }}
+            </h3>
+            <label class="block text-xs font-bold text-white">
+              Title task todo
+              <input
+                type="text"
+                [(ngModel)]="todoForm.label"
+                class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
+                placeholder="Task todo title"
+              />
+            </label>
+
+            <div *ngIf="isManager" class="mt-4 text-xs font-bold text-white">
+              <span>Assign users</span>
+              <div
+                class="mt-2 max-h-36 space-y-2 overflow-y-auto rounded-md bg-tertiary-200 p-2 text-black"
+              >
+                <p *ngIf="isLoadingUsers" class="px-2 py-1">Loading users...</p>
+                <label
+                  *ngFor="let user of getTodoAssignableUsers()"
+                  class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-white/50"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4"
+                    [checked]="isTodoUserSelected(user)"
+                    (change)="toggleTodoUser(user)"
+                  />
+                  <span class="truncate">{{ getUserLabel(user) }}</span>
+                </label>
               </div>
-              <div class="mt-4 hidden flex-1 border-t border-dashed border-white md:block"></div>
             </div>
 
-            <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] text-xs text-white">
-              <span>{{ getTodoCreatedTime(todo) }}</span>
-              <span class="row-span-3 w-1 rounded-full bg-white"></span>
-              <span>Created todo</span>
+            <label *ngIf="isManager" class="mt-4 block text-xs font-bold text-white">
+              Estimate time (hours)
+              <input
+                type="number"
+                min="0"
+                step="0.25"
+                [(ngModel)]="todoForm.estimate_time"
+                class="mt-2 h-10 w-full rounded-md border-0 bg-tertiary-200 px-3 text-xs text-black outline-none"
+                placeholder="Estimate time"
+              />
+            </label>
 
-              <span></span>
-              <span class="py-5 text-sm font-bold">{{ getTodoDuration(todo) }}</span>
+            <p *ngIf="todoErrorMessage" class="mt-3 text-xs font-bold text-red-600">
+              {{ todoErrorMessage }}
+            </p>
 
-              <span>{{ getTodoUpdatedTime(todo) }}</span>
-              <span>Updated todo</span>
-            </div>
-          </div>
-
-          <div class="flex flex-col items-start gap-3 md:items-end">
-            <span
-              class="h-fit rounded-full bg-tertiary-200 px-4 py-1.5 text-2xs font-bold text-black"
-              [class.bg-green-100]="todo.status === 'completed'"
-              [class.text-green-800]="todo.status === 'completed'"
-              [class.bg-yellow-100]="todo.status === 'progress'"
-              [class.text-yellow-800]="todo.status === 'progress'"
-            >
-              {{ getTodoStatusLabel(todo) }}
-            </span>
-            <span
-              *ngIf="isTodoFinishedTimelog(todo); else timelogActionButton"
-              class="rounded-md bg-green-100 px-4 py-2 text-2xs font-bold text-green-800"
-            >
-              Finished
-            </span>
-            <ng-template #timelogActionButton>
+            <div class="mt-4 flex justify-end gap-3">
+              <button
+                *ngIf="editingTodoClientId !== null && isManager"
+                type="button"
+                class="mr-auto h-9 w-24 rounded-md border-0 bg-red-100 text-xs font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+                [disabled]="isAddingTodo || isDeletingTodo"
+                (click)="deleteEditingTaskTodo()"
+              >
+                {{ isDeletingTodo ? 'Deleting...' : 'Delete' }}
+              </button>
               <button
                 type="button"
-                class="rounded-md bg-primary-200 px-4 py-2 text-2xs font-bold text-white transition hover:bg-primary-300 disabled:cursor-not-allowed disabled:opacity-60"
-                [disabled]="!canCreateTimelog(todo) || activeTimelogService.isEnding()"
-                (click)="createTimelogForTodo(todo)"
+                class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black"
+                [disabled]="isDeletingTodo"
+                (click)="closeTodoDialog()"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="h-9 w-24 rounded-md border-0 bg-[#d9d9d9] text-xs text-black disabled:cursor-not-allowed disabled:opacity-70"
+                [disabled]="isAddingTodo || isDeletingTodo"
+                (click)="submitTaskTodo()"
               >
                 {{
-                  isTodoActiveTimelog(todo)
-                    ? activeTimelogService.isEnding()
-                      ? 'Ending...'
-                      : 'End timelog'
-                    : creatingTimelogTodoId === todo.id
-                      ? 'Creating...'
-                      : isTodoPausedTimelog(todo)
-                        ? 'Continue timelog'
-                        : 'Create timelog'
+                  isAddingTodo
+                    ? editingTodoClientId !== null
+                      ? 'Updating...'
+                      : 'Adding...'
+                    : editingTodoClientId !== null
+                      ? 'Update'
+                      : 'Add'
                 }}
               </button>
-            </ng-template>
+            </div>
           </div>
         </div>
-      </article>
+
+        <div
+          *ngIf="isLoadingTaskTodos"
+          class="mt-4 rounded-lg bg-neutral-100 px-4 py-3 text-xs font-bold text-neutral-600"
+        >
+          Loading task todos...
+        </div>
+
+        <div class="mt-5 rounded-lg px-4 py-3">
+          <div class="flex items-center justify-between text-xs font-bold text-white">
+            <span>Task progress</span>
+            <span>{{ getTaskProgress() }}%</span>
+          </div>
+          <div class="mt-2 h-2 overflow-hidden rounded-full bg-white">
+            <div class="h-full rounded-full bg-[#2F4156]" [style.width.%]="getTaskProgress()"></div>
+          </div>
+        </div>
+
+        <div *ngIf="taskTodos.length" class="mt-5 max-h-[260px] space-y-4 overflow-y-auto pr-1">
+          <article
+            *ngFor="let todo of taskTodos"
+            class="relative min-h-[172px] rounded-xl border border-[#2F4156] px-5 py-4"
+            [class.ring-2]="isHighlightedTodo(todo)"
+            [class.ring-warning-300]="isHighlightedTodo(todo)"
+            [class.bg-warning-50/10]="isHighlightedTodo(todo)"
+            [class.cursor-pointer]="isManager && !isReadonly"
+            (click)="openEditTodoDialog(todo, $event)"
+          >
+            <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
+              <span
+                class="grid h-11 w-11 overflow-hidden rounded-full bg-primary-200 text-sm font-bold text-white"
+                [ngClass]="getTodoAvatarGridClass(todo)"
+              >
+                <span
+                  *ngFor="let assignee of getTodoAvatarUsers(todo); let assigneeIndex = index"
+                  class="grid h-full min-h-0 w-full min-w-0 place-items-center overflow-hidden border border-primary-300 bg-primary-200 text-[10px] font-bold text-white"
+                  [ngClass]="getTodoAvatarTileClass(todo, assigneeIndex)"
+                >
+                  <img
+                    *ngIf="getUserPhoto(assignee) as todoUserPhoto; else todoUserAvatarFallback"
+                    [src]="todoUserPhoto"
+                    [alt]="getUserLabel(assignee)"
+                    class="h-full w-full object-cover"
+                  />
+                  <ng-template #todoUserAvatarFallback>{{ getUserInitial(assignee) }}</ng-template>
+                </span>
+                <span
+                  *ngIf="!getTodoAvatarUsers(todo).length"
+                  class="grid h-full w-full place-items-center"
+                >
+                  ?
+                </span>
+              </span>
+
+              <div class="min-w-0">
+                <div class="flex items-start gap-4">
+                  <div class="min-w-0 max-w-[300px] sm:min-w-[220px]">
+                    <h3 class="break-all text-sm font-bold text-white sm:truncate">
+                      {{ todo.label }}
+                    </h3>
+                    <p class="mt-1 text-xs font-bold text-white">
+                      {{ getTodoAssigneeLabel(todo) }}
+                    </p>
+                    <p
+                      *ngIf="getTodoEstimateLabel(todo) as estimateLabel"
+                      class="mt-1 text-xs font-bold text-white/80"
+                    >
+                      Estimate {{ estimateLabel }}
+                    </p>
+                  </div>
+                  <div
+                    class="mt-4 hidden flex-1 border-t border-dashed border-white md:block"
+                  ></div>
+                </div>
+
+                <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] text-xs text-white">
+                  <span>{{ getTodoCreatedTime(todo) }}</span>
+                  <span class="row-span-3 w-1 rounded-full bg-white"></span>
+                  <span>Create timelog</span>
+
+                  <span></span>
+                  <span class="py-5 text-sm font-bold">{{ getTodoDuration(todo) }}</span>
+
+                  <span>{{ getTodoUpdatedTime(todo) }}</span>
+                  <span>End timelog</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col items-start gap-3 md:items-end">
+                <span
+                  class="h-fit rounded-full bg-tertiary-200 px-4 py-1.5 text-2xs font-bold text-black"
+                  [class.bg-green-100]="todo.status === 'completed'"
+                  [class.text-green-800]="todo.status === 'completed'"
+                  [class.bg-yellow-100]="todo.status === 'progress'"
+                  [class.text-yellow-800]="todo.status === 'progress'"
+                  [class.bg-gradient-to-r]="todo.status === 'completed_but_overdue'"
+                  [class.from-green-100]="todo.status === 'completed_but_overdue'"
+                  [class.to-red-100]="todo.status === 'completed_but_overdue'"
+                  [class.text-red-800]="todo.status === 'completed_but_overdue'"
+                >
+                  {{ getTodoStatusLabel(todo) }}
+                </span>
+                <span
+                  *ngIf="isTodoFinishedTimelog(todo); else timelogActionButton"
+                  class="rounded-md bg-green-100 px-4 py-2 text-2xs font-bold text-green-800"
+                >
+                  Finished
+                </span>
+                <ng-template #timelogActionButton>
+                  <button
+                    type="button"
+                    class="rounded-md bg-primary-200 px-4 py-2 text-2xs font-bold text-white transition hover:bg-primary-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    [disabled]="!canCreateTimelog(todo) || activeTimelogService.isEnding()"
+                    (click)="$event.stopPropagation(); createTimelogForTodo(todo)"
+                  >
+                    {{
+                      isTodoActiveTimelog(todo)
+                        ? activeTimelogService.isEnding()
+                          ? 'Ending...'
+                          : 'End timelog'
+                        : creatingTimelogTodoId === todo.id
+                          ? 'Creating...'
+                          : isTodoPausedTimelog(todo)
+                            ? 'Continue timelog'
+                            : 'Create timelog'
+                    }}
+                  </button>
+                </ng-template>
+              </div>
+            </div>
+          </article>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="activeTab === 'comments' && task?.id">
+        <section
+          data-task-comments-panel
+          class="relative mt-6 flex max-h-[min(560px,calc(100vh-360px))] min-h-[360px] flex-col overflow-visible rounded-lg border border-white/15 bg-primary-300/40 p-4"
+        >
+          <div
+            *ngIf="isLoadingComments"
+            class="rounded-md bg-white/10 px-4 py-8 text-center text-xs font-bold text-white"
+          >
+            Loading comments...
+          </div>
+
+          <div
+            *ngIf="!isLoadingComments"
+            data-task-comments-list
+            class="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-2"
+          >
+            <p
+              *ngIf="!taskComments.length"
+              class="rounded-md bg-white/10 px-4 py-8 text-center text-xs font-bold text-white"
+            >
+              No comments yet.
+            </p>
+
+            <div *ngIf="taskComments.length" class="mt-auto"></div>
+
+            <article
+              *ngFor="let comment of taskComments"
+              class="flex gap-3"
+              [class.justify-end]="isOwnComment(comment)"
+            >
+              <img
+                *ngIf="getUserPhoto(comment.user) as commentUserPhoto; else commentAvatarFallback"
+                [src]="commentUserPhoto"
+                [alt]="getCommentUserLabel(comment)"
+                class="h-9 w-9 shrink-0 rounded-full object-cover"
+                [class.order-2]="isOwnComment(comment)"
+              />
+              <ng-template #commentAvatarFallback>
+                <span
+                  class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-200 text-xs font-bold text-white"
+                  [class.order-2]="isOwnComment(comment)"
+                >
+                  {{ getUserInitial(comment.user) }}
+                </span>
+              </ng-template>
+
+              <div
+                class="max-w-[min(620px,80%)] rounded-lg px-4 py-3 text-xs text-black shadow"
+                [class.bg-white]="!isOwnComment(comment)"
+                [class.bg-tertiary-200]="isOwnComment(comment)"
+              >
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-extrabold">
+                  <span>{{ getCommentUserLabel(comment) }}</span>
+                  <span class="font-semibold opacity-70">{{ getCommentCreatedAt(comment) }}</span>
+                </div>
+                <p class="whitespace-pre-wrap break-all">
+                  <ng-container *ngFor="let part of getCommentMessageParts(comment)">
+                    <span *ngIf="part.type === 'text'">{{ part.value }}</span>
+                    <span
+                      *ngIf="part.type === 'mention'"
+                      data-comment-mention
+                      class="inline-block cursor-pointer font-bold text-sky-500"
+                      (click)="toggleMentionPopover(part, $event)"
+                    >
+                      {{ part.value }}
+                    </span>
+                  </ng-container>
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <div
+            *ngIf="activeMentionPopover as popover"
+            data-active-mention-popover
+            class="pointer-events-none invisible absolute z-[120] flex w-56 items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-black opacity-0 shadow-2xl ring-1 ring-black/10"
+            [style.top.px]="popover.top"
+            [style.left.px]="popover.left"
+          >
+            <img
+              *ngIf="getUserPhoto(popover.user) as activeMentionPhoto; else activeMentionAvatar"
+              [src]="activeMentionPhoto"
+              [alt]="getUserLabel(popover.user)"
+              class="h-9 w-9 shrink-0 rounded-full object-cover"
+            />
+            <ng-template #activeMentionAvatar>
+              <span
+                class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-200 text-xs font-bold text-white"
+              >
+                {{ getUserInitial(popover.user) }}
+              </span>
+            </ng-template>
+            <span class="flex min-w-0 flex-col">
+              <span class="truncate text-xs font-extrabold text-black">
+                {{ popover.user.username || popover.user.name }}
+              </span>
+              <span class="truncate text-[11px] font-semibold text-neutral-500">
+                {{ popover.user.email }}
+              </span>
+            </span>
+          </div>
+
+          <div class="relative mt-4 shrink-0">
+            <textarea
+              [(ngModel)]="commentMessage"
+              (ngModelChange)="onCommentMessageChange()"
+              placeholder="Write a comment with @username"
+              spellcheck="false"
+              class="h-20 w-full resize-none rounded-md border-0 bg-[#d9d9d9] px-4 py-3 text-xs text-black caret-black outline-none placeholder:text-neutral-700"
+            ></textarea>
+
+            <div
+              *ngIf="isMentionMenuOpen"
+              class="absolute bottom-[86px] left-0 z-10 max-h-48 w-[min(320px,100%)] overflow-auto rounded-md bg-white p-2 text-xs text-black shadow-xl"
+            >
+              <button
+                *ngFor="let user of getMentionUsers()"
+                type="button"
+                class="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-neutral-100"
+                (click)="insertMention(user)"
+              >
+                <img
+                  *ngIf="getUserPhoto(user) as mentionPhoto; else mentionAvatarFallback"
+                  [src]="mentionPhoto"
+                  [alt]="getUserLabel(user)"
+                  class="h-6 w-6 rounded-full object-cover"
+                />
+                <ng-template #mentionAvatarFallback>
+                  <span
+                    class="grid h-6 w-6 place-items-center rounded-full bg-primary-200 text-[10px] font-bold text-white"
+                  >
+                    {{ getUserInitial(user) }}
+                  </span>
+                </ng-template>
+                <span class="font-bold">@{{ user.username }}</span>
+              </button>
+            </div>
+          </div>
+
+          <p *ngIf="commentErrorMessage" class="mt-3 text-xs font-bold text-red-400">
+            {{ commentErrorMessage }}
+          </p>
+
+          <div class="mt-3 flex justify-end">
+            <button
+              type="button"
+              class="h-10 w-[132px] rounded-md border-0 bg-[#d9d9d9] text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-70"
+              [disabled]="isSubmittingComment"
+              (click)="submitComment()"
+            >
+              {{ isSubmittingComment ? 'Sending...' : 'Send' }}
+            </button>
+          </div>
+        </section>
+      </ng-container>
     </div>
 
     <p *ngIf="errorMessage" class="mt-4 text-sm font-bold text-red-600">{{ errorMessage }}</p>
@@ -427,6 +738,188 @@
         {{ isSaving ? 'Saving...' : task ? 'Update' : 'Save' }}
       </button>
     </footer>
+  </section>
+</div>
+
+<div
+  *ngIf="isAttachmentDialogOpen"
+  appGsapModal
+  class="fixed inset-0 z-80 flex items-center justify-center bg-black/30 p-4"
+  role="presentation"
+  (click)="closeAttachmentDialog()"
+>
+  <section
+    class="max-h-[calc(100vh-48px)] w-[min(620px,calc(100vw-32px))] overflow-auto rounded-lg bg-white p-5 text-black shadow-2xl"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="flex items-center justify-between gap-4">
+      <div>
+        <h3 class="m-0 text-lg font-extrabold text-black">Upload Attachment Files</h3>
+        <p class="mt-1 text-xs font-bold text-neutral-600">Max 10MB per file</p>
+      </div>
+      <button
+        type="button"
+        aria-label="Close attachment dialog"
+        class="grid h-7 w-7 place-items-center rounded-full border-0 bg-[#d9d9d9] text-xs text-black"
+        [disabled]="isUploadingAttachments"
+        (click)="closeAttachmentDialog()"
+      >
+        X
+      </button>
+    </header>
+
+    <input
+      #attachmentFileInput
+      type="file"
+      multiple
+      class="hidden"
+      (change)="onAttachmentInputChange($event)"
+    />
+
+    <button
+      type="button"
+      class="mt-5 flex min-h-[190px] w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-primary-200 bg-neutral-50 px-5 text-center transition hover:bg-neutral-100"
+      [class.border-primary-500]="isDragOverAttachmentDropzone"
+      [class.bg-primary-50]="isDragOverAttachmentDropzone"
+      (click)="attachmentFileInput.click()"
+      (dragover)="onAttachmentDragOver($event)"
+      (dragleave)="onAttachmentDragLeave($event)"
+      (drop)="onAttachmentDrop($event)"
+    >
+      <span
+        class="grid h-12 w-12 place-items-center rounded-md bg-primary-200 text-xl font-extrabold text-white"
+      >
+        +
+      </span>
+      <span class="text-sm font-extrabold text-black">Upload attachment file</span>
+      <span class="text-xs font-semibold text-neutral-600"
+        >Drag files here or click to choose files</span
+      >
+    </button>
+
+    <p *ngIf="attachmentErrorMessage" class="mt-3 text-xs font-bold text-red-600">
+      {{ attachmentErrorMessage }}
+    </p>
+
+    <div *ngIf="pendingAttachmentFiles.length" class="mt-5 space-y-2">
+      <button
+        *ngFor="let file of pendingAttachmentFiles"
+        type="button"
+        class="flex w-full items-center gap-3 rounded-md border border-neutral-200 bg-white px-3 py-3 text-left hover:bg-neutral-50"
+        (click)="openAttachmentViewer(file)"
+      >
+        <span
+          class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary-200 text-[10px] font-extrabold text-white"
+        >
+          {{ getAttachmentIconLabel(file) }}
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm font-extrabold text-black">
+            {{ getAttachmentName(file) }}
+          </span>
+          <span class="text-xs font-semibold text-neutral-600">
+            {{ getAttachmentSizeLabel(file) }}
+          </span>
+        </span>
+        <span
+          role="button"
+          tabindex="0"
+          class="grid h-7 w-7 place-items-center rounded-full bg-neutral-100 text-xs font-bold text-black hover:bg-neutral-200"
+          aria-label="Remove pending file"
+          (click)="removePendingAttachmentFile(file); $event.stopPropagation()"
+          (keydown.enter)="removePendingAttachmentFile(file); $event.stopPropagation()"
+        >
+          X
+        </span>
+      </button>
+    </div>
+
+    <footer class="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
+      <button
+        type="button"
+        class="h-10 rounded-md bg-neutral-100 px-5 text-sm font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-70"
+        [disabled]="isUploadingAttachments"
+        (click)="closeAttachmentDialog()"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="h-10 rounded-md bg-tertiary-300 px-5 text-sm font-bold text-tertiary-800 transition hover:bg-tertiary-400 disabled:cursor-not-allowed disabled:opacity-70"
+        [disabled]="isUploadingAttachments"
+        (click)="confirmAttachmentFiles()"
+      >
+        {{ isUploadingAttachments ? 'Uploading...' : 'Okay' }}
+      </button>
+    </footer>
+  </section>
+</div>
+
+<div
+  *ngIf="isAttachmentViewerOpen"
+  appGsapModal
+  class="fixed inset-0 z-90 flex items-center justify-center bg-black/40 p-4"
+  role="presentation"
+  (click)="closeAttachmentViewer()"
+>
+  <section
+    class="max-h-[calc(100vh-48px)] w-[min(860px,calc(100vw-32px))] overflow-auto rounded-lg bg-white p-5 text-black shadow-2xl"
+    role="dialog"
+    aria-modal="true"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <h3 class="truncate text-lg font-extrabold text-black">
+          {{ getAttachmentName(selectedAttachment!) }}
+        </h3>
+        <p class="mt-1 text-xs font-bold text-neutral-600">
+          {{ getAttachmentSizeLabel(selectedAttachment!) }}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label="Close attachment viewer"
+        class="grid h-7 w-7 place-items-center rounded-full border-0 bg-[#d9d9d9] text-xs text-black"
+        (click)="closeAttachmentViewer()"
+      >
+        X
+      </button>
+    </header>
+
+    <div class="mt-5 min-h-[320px] rounded-lg bg-neutral-100 p-3">
+      <img
+        *ngIf="isImageAttachment(selectedAttachment); else nonImageAttachmentViewer"
+        [src]="getAttachmentUrl(selectedAttachment)"
+        [alt]="getAttachmentName(selectedAttachment!)"
+        class="mx-auto max-h-[65vh] max-w-full rounded-md object-contain"
+      />
+      <ng-template #nonImageAttachmentViewer>
+        <iframe
+          *ngIf="
+            isPdfAttachment(selectedAttachment) && selectedAttachmentSafeUrl;
+            else unsupportedAttachmentViewer
+          "
+          [src]="selectedAttachmentSafeUrl"
+          title="Attachment viewer"
+          class="h-[65vh] w-full rounded-md border-0 bg-white"
+        ></iframe>
+      </ng-template>
+      <ng-template #unsupportedAttachmentViewer>
+        <div class="grid min-h-[320px] place-items-center text-center">
+          <a
+            [href]="getAttachmentUrl(selectedAttachment)"
+            target="_blank"
+            rel="noreferrer"
+            class="rounded-md bg-primary-200 px-5 py-3 text-sm font-bold text-white"
+          >
+            Open file
+          </a>
+        </div>
+      </ng-template>
+    </div>
   </section>
 </div>
 
@@ -530,7 +1023,9 @@
             class="h-7 w-7 shrink-0 rounded-full object-cover"
           />
           <ng-template #userDialogAvatarFallback>
-            <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-200 text-xs font-bold text-white">
+            <span
+              class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-200 text-xs font-bold text-white"
+            >
               {{ getUserInitial(user) }}
             </span>
           </ng-template>

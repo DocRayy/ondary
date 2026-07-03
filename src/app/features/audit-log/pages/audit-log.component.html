@@ -1,0 +1,212 @@
+<section class="space-y-5 pr-0 text-white lg:pr-8">
+  <div>
+    <h1 class="text-base font-extrabold">Audit Log</h1>
+  </div>
+
+  <div class="rounded-xl bg-primary-800/75 p-4 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/10">
+    <div class="mb-4 flex items-center gap-2 text-sm font-extrabold">
+      <fc-icon icon="filter-linear" class="text-lg"></fc-icon>
+      <span>Integrated Filter and Search</span>
+    </div>
+
+    <div class="grid gap-3 md:grid-cols-[minmax(220px,1fr)_180px_180px]">
+      <div class="relative">
+        <fc-icon icon="search-linear" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base text-white/70"></fc-icon>
+        <input
+          type="text"
+          placeholder="Search by Username or Endpoint..."
+          [ngModel]="searchTerm()"
+          (ngModelChange)="searchLogs($event)"
+          class="ondary-form-input h-10 min-h-10 rounded-lg pl-11 text-xs"
+        />
+      </div>
+
+      <app-dropdown-select
+        ariaLabel="Select module"
+        [options]="moduleOptions()"
+        [value]="selectedModule()"
+        [buttonClass]="'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/15 bg-primary-900/60 px-3 text-left text-xs font-bold text-white outline-none transition hover:border-white/30'"
+        (valueChange)="selectModule($event)"
+      />
+
+      <app-dropdown-select
+        ariaLabel="Select action"
+        [options]="actionOptions()"
+        [value]="selectedAction()"
+        [buttonClass]="'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-white/15 bg-primary-900/60 px-3 text-left text-xs font-bold text-white outline-none transition hover:border-white/30'"
+        (valueChange)="selectAction($event)"
+      />
+    </div>
+  </div>
+
+  <div *ngIf="errorMessage()" class="rounded-xl border border-error-400/20 bg-error-600/15 px-4 py-3 text-sm font-bold text-error-100">
+    {{ errorMessage() }}
+  </div>
+
+  <section class="overflow-x-auto rounded-xl bg-primary-800/75 p-4 shadow-[0_18px_45px_rgb(13_24_38/0.22)] ring-1 ring-white/10">
+    <div class="min-w-[920px]">
+      <div class="grid grid-cols-[1.15fr_1fr_.8fr_.8fr_1.45fr_.65fr] gap-4 border-b border-white/10 px-2 pb-3 text-2xs font-extrabold uppercase text-white/70">
+        <span>Timestamp</span>
+        <span>User</span>
+        <span>Action</span>
+        <span>Module</span>
+        <span>Endpoint</span>
+        <span>Status</span>
+      </div>
+
+      <div *ngIf="isLoading()" class="divide-y divide-white/5">
+        <div
+          *ngFor="let row of [1, 2, 3, 4, 5, 6]"
+          class="grid grid-cols-[1.15fr_1fr_.8fr_.8fr_1.45fr_.65fr] items-center gap-4 px-2 py-3"
+          aria-hidden="true"
+        >
+          <span class="h-4 w-32 animate-pulse rounded bg-primary-700/80"></span>
+          <span class="h-4 w-24 animate-pulse rounded bg-primary-700/80"></span>
+          <span class="h-6 w-20 animate-pulse rounded-md bg-primary-700/80"></span>
+          <span class="h-4 w-24 animate-pulse rounded bg-primary-700/80"></span>
+          <span class="h-4 w-56 max-w-full animate-pulse rounded bg-primary-700/80"></span>
+          <span class="h-6 w-14 animate-pulse rounded-md bg-primary-700/80"></span>
+        </div>
+      </div>
+
+      <div *ngIf="!isLoading()" class="divide-y divide-white/5">
+        <div
+          *ngFor="let log of logs(); trackBy: trackLog"
+          class="grid cursor-pointer grid-cols-[1.15fr_1fr_.8fr_.8fr_1.45fr_.65fr] items-center gap-4 rounded-lg px-2 py-3 text-xs font-semibold text-white transition hover:bg-white/5"
+          role="button"
+          tabindex="0"
+          (click)="openDetail(log)"
+          (keydown.enter)="openDetail(log)"
+          (keydown.space)="openDetail(log); $event.preventDefault()"
+        >
+          <span class="truncate">{{ getTimestamp(log) }}</span>
+          <span class="truncate">{{ getUserLabel(log) }}</span>
+          <span class="w-fit rounded-md px-2.5 py-1 text-2xs font-extrabold" [ngClass]="getActionClass(log.action)">
+            {{ getActionLabel(log.action) }}
+          </span>
+          <span class="truncate">{{ log.module || '-' }}</span>
+          <span class="truncate">{{ getTargetUrl(log) }}</span>
+          <span class="w-fit rounded-md px-2.5 py-1 text-2xs font-extrabold" [ngClass]="getStatusClass(log)">
+            {{ getStatusLabel(log) }}
+          </span>
+        </div>
+
+        <div *ngIf="!logs().length" class="rounded-lg bg-primary-700/60 px-4 py-4 text-sm font-bold text-white/80">
+          No audit logs found.
+        </div>
+      </div>
+
+      <app-table-pagination
+        class="mt-4 block"
+        [meta]="meta()"
+        (pageChange)="selectPage($event)"
+        (limitChange)="selectLimit($event)"
+      />
+    </div>
+  </section>
+
+  <div *ngIf="selectedLog()" class="fixed inset-0 z-50 bg-black/35" role="presentation" (click)="closeDetail()" appGsapModal="drawer-right">
+    <aside
+      class="ml-auto flex h-full w-full max-w-[520px] flex-col bg-primary-900 text-white shadow-[-24px_0_80px_rgb(0_0_0/0.35)] ring-1 ring-white/10"
+      role="dialog"
+      aria-modal="true"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="flex h-14 items-center justify-between border-b border-white/10 px-5">
+        <h2 class="truncate text-sm font-extrabold">Audit Log #{{ selectedLog()?.id || '-' }}</h2>
+        <button type="button" class="grid h-8 w-8 place-items-center rounded-full hover:bg-white/10" aria-label="Close detail" (click)="closeDetail()">
+          <fc-icon icon="close-linear" class="text-sm"></fc-icon>
+        </button>
+      </header>
+
+      <div class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+
+        <section class="grid gap-2 rounded-lg border border-white/10 bg-primary-950/50 p-3 text-2xs">
+          <div class="grid grid-cols-[120px_1fr] gap-2" *ngFor="let key of auditSimpleFields">
+            <span class="font-extrabold uppercase text-white/50">{{ key }}</span>
+            <span class="break-all font-bold text-white/80">{{ getSimpleField(selectedLog(), key) }}</span>
+          </div>
+        </section>
+
+        <section>
+          <h3 class="mb-2 text-2xs font-extrabold uppercase text-white/60">Payload Changes</h3>
+          <div class="overflow-hidden rounded-lg border border-white/10 bg-[#111827] font-mono text-2xs">
+            <div class="grid grid-cols-[1fr_1.2fr_1.2fr] border-b border-white/10 bg-primary-950/80 px-3 py-2 font-sans text-2xs font-extrabold uppercase text-white/60">
+              <span>Field</span>
+              <span>Before</span>
+              <span>After</span>
+            </div>
+
+            <div
+              *ngFor="let row of getDiffRows(selectedLog()); trackBy: trackDiffRow"
+              class="grid grid-cols-[1fr_1.2fr_1.2fr] gap-3 px-3 py-2"
+              [ngClass]="{
+                'bg-error-950/70 text-error-100': row.type === 'removed' || row.type === 'changed',
+                'bg-success-950/70 text-success-100': row.type === 'added',
+                'text-white/75': row.type === 'same'
+              }"
+            >
+              <span class="truncate font-bold">{{ row.key }}</span>
+              <span class="min-w-0 break-all">
+                <span *ngIf="row.type === 'removed' || row.type === 'changed'" class="mr-1 font-extrabold">-</span>{{ row.before || '-' }}
+              </span>
+              <span class="min-w-0 break-all">
+                <span *ngIf="row.type === 'added' || row.type === 'changed'" class="mr-1 font-extrabold">+</span>{{ row.after || '-' }}
+              </span>
+            </div>
+
+            <div *ngIf="!getDiffRows(selectedLog()).length" class="px-3 py-4 font-sans text-xs font-bold text-white/70">
+              No payload changes.
+            </div>
+          </div>
+        </section>
+
+        <section class="grid gap-3 md:grid-cols-2">
+          <div>
+            <h3 class="mb-2 text-2xs font-extrabold uppercase text-white/60">Old Values</h3>
+            <div class="overflow-hidden rounded-lg border border-white/10 bg-[#111827] font-mono text-2xs">
+              <div
+                *ngFor="let row of getOldValueRows(selectedLog()); trackBy: trackValueDiffRow"
+                class="grid grid-cols-[1fr_1.5fr] gap-3 bg-error-950/70 px-3 py-2 text-error-100"
+              >
+                <span class="truncate font-bold">{{ row.key }}</span>
+                <span class="min-w-0 break-all"><span class="mr-1 font-extrabold">-</span>{{ row.value || '-' }}</span>
+              </div>
+              <div *ngIf="!getOldValueRows(selectedLog()).length" class="px-3 py-4 font-sans text-xs font-bold text-white/70">
+                -
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 class="mb-2 text-2xs font-extrabold uppercase text-white/60">New Values</h3>
+            <div class="overflow-hidden rounded-lg border border-white/10 bg-[#111827] font-mono text-2xs">
+              <div
+                *ngFor="let row of getNewValueRows(selectedLog()); trackBy: trackValueDiffRow"
+                class="grid grid-cols-[1fr_1.5fr] gap-3 px-3 py-2"
+                [ngClass]="{
+                  'bg-error-950/70 text-error-100': row.type === 'removed',
+                  'bg-success-950/70 text-success-100': row.type === 'added'
+                }"
+              >
+                <span class="truncate font-bold">{{ row.key }}</span>
+                <span class="min-w-0 break-all">
+                  <span class="mr-1 font-extrabold">{{ row.type === 'removed' ? '-' : '+' }}</span>{{ row.value || '-' }}
+                </span>
+              </div>
+              <div *ngIf="!getNewValueRows(selectedLog()).length" class="px-3 py-4 font-sans text-xs font-bold text-white/70">
+                -
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid gap-3 md:grid-cols-2">
+          <div *ngFor="let field of auditJsonFields">
+            <h3 class="mb-2 text-2xs font-extrabold uppercase text-white/60">{{ field.label }}</h3>
+            <pre class="max-h-72 overflow-auto rounded-lg bg-[#111827] p-3 text-2xs leading-relaxed text-white/80 ring-1 ring-white/10">{{ formatPayload(getJsonField(selectedLog(), field.key)) }}</pre>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+</section>

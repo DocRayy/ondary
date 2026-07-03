@@ -266,6 +266,7 @@
   input[type='email']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only),
   input[type='password']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only),
   input[type='date']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only),
+  select:not(.fc-unstyled-input),
   textarea:not(.fc-unstyled-input) {
     border: 1.5px solid rgb(200 217 230 / 50%);
     border-radius: 0.6rem;
@@ -282,6 +283,7 @@
   input[type='email']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
   input[type='password']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
   input[type='date']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
+  select:not(.fc-unstyled-input):focus,
   textarea:not(.fc-unstyled-input):focus {
     border-color: #fff;
     box-shadow: 0 0 0 3px rgb(200 217 230 / 14%);
@@ -289,8 +291,10 @@
 
   .text-black input[type='text']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
   .text-black input[type='email']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
-  .text-black input[type='password']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
+  .text-black
+    input[type='password']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
   .text-black input[type='date']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only):focus,
+  .text-black select:not(.fc-unstyled-input):focus,
   .text-black textarea:not(.fc-unstyled-input):focus {
     border-color: #2f4156;
   }
@@ -298,9 +302,81 @@
   input[type='text']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only)::placeholder,
   input[type='email']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only)::placeholder,
   input[type='password']:not(.fc-input-text):not(.fc-unstyled-input):not(.sr-only)::placeholder,
+  select:not(.fc-unstyled-input)::placeholder,
   textarea:not(.fc-unstyled-input)::placeholder {
     color: currentColor;
     opacity: 0.58;
+  }
+
+  .ondary-dialog-panel {
+    background: #1e293b;
+    color: #fff;
+    box-shadow: 0 24px 80px rgb(0 0 0 / 34%);
+  }
+
+  .ondary-form-input {
+    min-height: 3.5rem;
+    width: 100%;
+    border: 1.5px solid rgb(200 217 230 / 50%);
+    border-radius: 0.6rem;
+    background: transparent;
+    padding: 0 1.25rem;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    outline: none;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      background-color 0.2s ease;
+  }
+
+  .ondary-form-input:focus {
+    border-color: #fff;
+    box-shadow: 0 0 0 3px rgb(200 217 230 / 14%);
+  }
+
+  .ondary-form-input::placeholder {
+    color: #c8d9e6;
+    opacity: 0.8;
+  }
+
+  textarea.ondary-form-input {
+    min-height: 7rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    resize: none;
+  }
+
+  select.ondary-form-input {
+    appearance: none;
+    color: #fff;
+  }
+
+  select.ondary-form-input option {
+    background: #1e293b;
+    color: #fff;
+  }
+
+  .ondary-form-button {
+    min-height: 3.5rem;
+    border-radius: 0.6rem;
+    background: #d9d9d9;
+    color: #000;
+    font-size: 0.75rem;
+    font-weight: 800;
+    transition:
+      background-color 0.2s ease,
+      opacity 0.2s ease;
+  }
+
+  .ondary-form-button:hover:not(:disabled) {
+    background: #e5e7eb;
+  }
+
+  .ondary-form-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 }
 
@@ -317,6 +393,15 @@
 ::-webkit-scrollbar-track {
   border-radius: 5px;
   background: var(--muted);
+}
+
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 .board-task-card.cdk-drag-preview {

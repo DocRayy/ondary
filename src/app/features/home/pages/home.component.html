@@ -4,7 +4,7 @@
       class="flex min-w-0 flex-col justify-between gap-6 rounded-3xl bg-[#1E293B] p-6 shadow-sm xl:flex-row xl:items-center"
     >
       <div class="min-w-0 space-y-4">
-        <h1 class="break-all text-3xl font-bold text-tertiary-300">
+        <h1 class="break-all text-3xl font-bold capitalize text-tertiary-300">
           {{ getGreeting() }}, {{ greetingName() }}!
         </h1>
         <p class="max-w-xl text-xl text-tertiary-50">Lets get started today!</p>
@@ -39,7 +39,9 @@
     <div *ngIf="isManager" class="rounded-3xl bg-[#1E293B] p-6 shadow-sm">
       <div class="flex flex-wrap items-center gap-3">
         <h2 class="text-base font-bold text-tertiary-50">Task Overview</h2>
-        <div class="ml-auto flex overflow-x-auto rounded-full bg-[#475569] p-1 text-xs font-bold text-tertiary-100">
+        <div
+          class="ml-auto flex overflow-x-auto rounded-full bg-[#475569] p-1 text-xs font-bold text-tertiary-100"
+        >
           <button
             type="button"
             class="rounded-full px-4 py-2"
@@ -162,7 +164,7 @@
             <span
               class="rounded-full bg-tertiary-200 px-3 py-0.5 text-xs font-bold text-tertiary-700"
             >
-              {{ ongoingTasks().length }}
+              {{ ongoingWorkItems().length }}
             </span>
           </button>
           <button
@@ -177,12 +179,19 @@
             <span
               class="rounded-full bg-tertiary-200 px-3 py-0.5 text-xs font-bold text-tertiary-700"
             >
-              {{ completedTasks().length }}
+              {{ completedWorkItems().length }}
             </span>
           </button>
         </div>
 
         <div class="min-h-80 bg-[#1E293B] p-5">
+          <div
+            *ngIf="summaryErrorMessage()"
+            class="mb-4 rounded-2xl bg-red-500/15 px-5 py-3 text-sm font-semibold text-red-100"
+          >
+            {{ summaryErrorMessage() }}
+          </div>
+
           <div
             *ngIf="loadingSummary()"
             class="rounded-2xl bg-[#475569] px-5 py-4 text-sm font-semibold text-tertiary-50"
@@ -191,27 +200,129 @@
           </div>
 
           <div
-            *ngIf="!loadingSummary() && visibleTasks().length === 0"
+            *ngIf="!loadingSummary() && visibleWorkItems().length === 0"
             class="rounded-2xl bg-[#475569] px-5 py-4 text-sm font-semibold text-tertiary-50"
           >
             No task
           </div>
 
-          <div *ngIf="!loadingSummary() && visibleTasks().length > 0" class="grid gap-4">
-            <div
-              *ngFor="let task of visibleTasks()"
-              class="flex min-w-0 flex-col items-stretch justify-between gap-4 rounded-2xl bg-[#475569] px-5 py-4 shadow-sm sm:flex-row sm:items-center"
-            >
-              <p class="min-w-0 truncate text-sm font-bold text-tertiary-50">
-                {{ getTaskTitle(task) }}
-              </p>
-              <a
-                routerLink="/task/list"
-                class="shrink-0 rounded-full bg-tertiary-200 px-4 py-2 text-center text-xs font-bold text-tertiary-900 transition hover:bg-tertiary-300"
+          <div *ngIf="!loadingSummary() && visibleWorkItems().length > 0" class="grid gap-4">
+            <ng-container *ngFor="let item of visibleWorkItems()">
+              <article
+                class="cursor-pointer rounded-2xl bg-[#475569] px-5 py-4 shadow-sm transition hover:bg-[#526174]"
+                role="button"
+                tabindex="0"
+                (click)="item.task ? openTaskFromHome(item.task) : item.todo && openTodoTaskDialog(item.todo)"
+                (keydown.enter)="
+                  item.task ? openTaskFromHome(item.task) : item.todo && openTodoTaskDialog(item.todo)
+                "
+                (keydown.space)="
+                  item.task ? openTaskFromHome(item.task) : item.todo && openTodoTaskDialog(item.todo);
+                  $event.preventDefault()
+                "
               >
-                View task
-              </a>
-            </div>
+                <div class="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div class="min-w-0">
+                    <ng-container *ngIf="item.task as task">
+                      <p class="text-2xs font-bold uppercase text-tertiary-200">Task</p>
+                      <h3 class="mt-1 break-all text-sm font-bold text-white">
+                        {{ getTaskTitle(task) }}
+                      </h3>
+                    </ng-container>
+
+                    <ng-container *ngIf="item.todo as todo">
+                      <div class="flex items-start gap-4">
+                        <div class="min-w-0">
+                          <p class="text-2xs font-bold uppercase text-tertiary-200">Task Todo</p>
+                          <h3 class="mt-1 break-all text-sm font-bold text-white">
+                            {{ getTodoLabel(todo) }}
+                          </h3>
+                          <p class="mt-1 text-xs font-bold text-white/80">
+                            {{ getTodoTaskTitle(todo) }}
+                          </p>
+                          <p class="mt-1 text-xs font-bold text-white">
+                            {{ getTodoAssigneeLabel(todo) }}
+                          </p>
+                          <p
+                            *ngIf="getTodoEstimateLabel(todo) as estimateLabel"
+                            class="mt-1 text-xs font-bold text-white/80"
+                          >
+                            Estimate {{ estimateLabel }}
+                          </p>
+                        </div>
+                        <div class="mt-5 hidden flex-1 border-t border-dashed border-white/50 md:block"></div>
+                      </div>
+
+                      <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] text-xs text-white">
+                        <span>{{ getTodoCreatedTime(todo) }}</span>
+                        <span class="row-span-3 w-1 rounded-full bg-white"></span>
+                        <span>Created todo</span>
+
+                        <span></span>
+                        <span class="py-5 text-sm font-bold">{{ getTodoDuration(todo) }}</span>
+
+                        <span>{{ getTodoUpdatedTime(todo) }}</span>
+                        <span>Updated todo</span>
+                      </div>
+                    </ng-container>
+                  </div>
+
+                  <div class="flex flex-col items-start gap-3 md:items-end">
+                    <ng-container *ngIf="item.task as task">
+                      <button
+                        type="button"
+                        class="shrink-0 rounded-full bg-tertiary-200 px-4 py-2 text-center text-xs font-bold text-tertiary-900 transition hover:bg-tertiary-300"
+                        (click)="$event.stopPropagation(); openTaskFromHome(task)"
+                      >
+                        View task
+                      </button>
+                    </ng-container>
+
+                    <ng-container *ngIf="item.todo as todo">
+                      <span
+                        class="h-fit rounded-full bg-tertiary-200 px-4 py-1.5 text-2xs font-bold text-black"
+                        [class.bg-green-100]="todo.status === 'completed'"
+                        [class.text-green-800]="todo.status === 'completed'"
+                        [class.bg-yellow-100]="todo.status === 'progress'"
+                        [class.text-yellow-800]="todo.status === 'progress'"
+                        [class.bg-gradient-to-r]="todo.status === 'completed_but_overdue'"
+                        [class.from-green-100]="todo.status === 'completed_but_overdue'"
+                        [class.to-red-100]="todo.status === 'completed_but_overdue'"
+                        [class.text-red-800]="todo.status === 'completed_but_overdue'"
+                      >
+                        {{ getTodoStatusLabel(todo) }}
+                      </span>
+                      <span
+                        *ngIf="isTodoFinishedTimelog(todo); else homeTimelogAction"
+                        class="rounded-md bg-green-100 px-4 py-2 text-2xs font-bold text-green-800"
+                      >
+                        Finished
+                      </span>
+                      <ng-template #homeTimelogAction>
+                        <button
+                          type="button"
+                          class="rounded-md bg-primary-200 px-4 py-2 text-2xs font-bold text-white transition hover:bg-primary-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          [disabled]="!canCreateTimelog(todo) || activeTimelogService.isEnding()"
+                          (click)="createTimelogForTodo(todo, $event)"
+                        >
+                          {{
+                            isTodoActiveTimelog(todo)
+                              ? activeTimelogService.isEnding()
+                                ? 'Ending...'
+                                : 'End timelog'
+                              : creatingTimelogTodoId() === todo.id
+                                ? 'Creating...'
+                                : isTodoPausedTimelog(todo)
+                                  ? 'Continue timelog'
+                                  : 'Create timelog'
+                          }}
+                        </button>
+                      </ng-template>
+                    </ng-container>
+                  </div>
+                </div>
+              </article>
+            </ng-container>
           </div>
         </div>
       </div>
@@ -222,4 +333,16 @@
     <app-manager-notes></app-manager-notes>
     <app-sticky-notes></app-sticky-notes>
   </div>
+
+  <app-task-dialog
+    *ngIf="selectedTaskDialogTask()"
+    [visible]="isTaskDialogOpen()"
+    [defaultStatus]="selectedTaskDialogStatus()"
+    [task]="selectedTaskDialogTask()"
+    [highlightedTodoId]="selectedTaskTodoId()"
+    [isReadonly]="true"
+    (visibleChange)="onTaskDialogVisibleChange($event)"
+    (taskUpdated)="onTaskUpdated($event)"
+    (taskDeleted)="onTaskDeleted()"
+  />
 </section>

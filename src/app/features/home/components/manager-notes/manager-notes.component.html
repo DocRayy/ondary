@@ -29,18 +29,63 @@
       placeholder="Note"
       class="w-full resize-none rounded-sm border-0 bg-tertiary-100 text-black px-3 py-2 text-xs outline-none"
     ></textarea>
-    <div class="max-h-28 space-y-2 overflow-y-auto">
-      <label
-        *ngFor="let user of users(); trackBy: trackUser"
-        class="flex items-center gap-2 text-xs font-semibold"
+    <label
+      class="flex items-center justify-between gap-3 rounded-sm bg-[#334155] px-3 py-2 text-xs font-semibold"
+    >
+      <span>Send to all users</span>
+      <input
+        name="managerNoteSendToAll"
+        type="checkbox"
+        [(ngModel)]="sendToAllUsers"
+        (ngModelChange)="onSendToAllUsersChange()"
+      />
+    </label>
+
+    <div *ngIf="!sendToAllUsers" class="relative" (click)="$event.stopPropagation()">
+      <div
+        class="flex min-h-10 flex-wrap items-center gap-2 rounded-sm bg-tertiary-100 px-2 py-2 text-black"
       >
+        <span
+          *ngFor="let user of selectedUsers; trackBy: trackUser"
+          class="flex max-w-full items-center gap-1 rounded-full bg-[#1E293B] px-2 py-1 text-2xs font-bold text-white"
+        >
+          <span class="truncate">{{ user.name || user.username || user.email }}</span>
+          <button
+            type="button"
+            class="text-white"
+            aria-label="Remove selected user"
+            (click)="removeSelectedUser(user)"
+          >
+            X
+          </button>
+        </span>
         <input
-          type="checkbox"
-          [name]="'manager-note-user-' + user.id"
-          [(ngModel)]="selectedUserIds[user.id || '']"
+          name="managerNoteUserSearch"
+          [(ngModel)]="userSearch"
+          class="min-w-0 flex-1 bg-transparent text-xs font-bold text-black outline-none"
+          placeholder="Search users"
+          autocomplete="off"
+          (focus)="isUserPickerOpen = true"
+          (ngModelChange)="isUserPickerOpen = true"
         />
-        <span>{{ user.name || user.username || user.email }}</span>
-      </label>
+      </div>
+
+      <div
+        *ngIf="isUserPickerOpen"
+        class="absolute left-0 top-full z-20 mt-1 max-h-44 w-full overflow-auto rounded-md bg-white p-2 text-xs text-black shadow-xl"
+      >
+        <button
+          *ngFor="let user of getFilteredUsers(); trackBy: trackUser"
+          type="button"
+          class="block w-full rounded px-2 py-2 text-left font-semibold hover:bg-neutral-100"
+          (click)="selectUser(user)"
+        >
+          {{ user.name || user.username || user.email }}
+        </button>
+        <p *ngIf="!getFilteredUsers().length" class="px-2 py-2 font-semibold text-neutral-500">
+          No users found.
+        </p>
+      </div>
     </div>
     <p *ngIf="errorMessage()" class="text-xs font-bold text-red-700">{{ errorMessage() }}</p>
     <div class="flex gap-2">
@@ -57,6 +102,20 @@
     </div>
   </form>
 
+  <div
+    *ngIf="errorMessage() && !showForm()"
+    class="mt-4 rounded-md bg-red-50 px-3 py-3 text-xs font-bold text-red-700"
+  >
+    <p>{{ errorMessage() }}</p>
+    <button
+      type="button"
+      class="mt-2 rounded bg-red-100 px-3 py-1 text-2xs font-bold text-red-800"
+      (click)="reloadNotes()"
+    >
+      Reload
+    </button>
+  </div>
+
   <div class="mt-4 space-y-3">
     <div
       *ngFor="let item of notes(); trackBy: trackNote"
@@ -67,7 +126,7 @@
     >
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <p class="wrap-break-words text-sm font-semibold text-tertiary-800">{{ item.title }}</p>
+          <p class="wrap-break-all text-sm font-semibold text-tertiary-800">{{ item.title }}</p>
           <p class="mt-1 text-2xs font-semibold text-tertiary-500">
             {{ getNoteUsername(item) }}
           </p>
@@ -83,7 +142,7 @@
           <button
             type="button"
             [disabled]="deletingId() === item.id"
-            class="rounded-full bg-white px-2 py-0.5 text-2xs font-semibold text-danger-600 disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-full bg-white px-2 py-0.5 text-2xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
             (click)="deleteNote(item)"
           >
             {{ deletingId() === item.id ? '...' : 'Delete' }}

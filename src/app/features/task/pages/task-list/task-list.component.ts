@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import {
   CdkDragDrop,
   DragDropModule,
@@ -10,6 +10,11 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { finalize, forkJoin, Subscription } from 'rxjs';
 import { FcIconComponent } from '@shared/components/fc-icon/fc-icon.component';
+import {
+  DropdownSelectComponent,
+  DropdownSelectOption,
+  DropdownSelectValue,
+} from '@shared/components/dropdown-select/dropdown-select.component';
 import { TaskDialogComponent } from '../../components/task-dialog/task-dialog.component';
 import {
   TASK_STATUSES,
@@ -35,8 +40,10 @@ import {
 import { RolePermissionService } from '../../../../core/auth/role-permission.service';
 import { UserOption } from '../../schema/task.schema';
 import { ToastService } from '../../../../shared/components/toast/toast.service';
-import { getApiMediaUrl } from '@app/shared/utils/media';
+import { getApiMediaUrl, getFirstMediaUrl } from '@app/shared/utils/media';
 import { GsapModalDirective } from '../../../../shared/directives/gsap-modal.directive';
+import { UpcomingUserSeparatorComponent } from '../../../../shared/components/upcoming-user-separator/upcoming-user-separator.component';
+import gsap from 'gsap';
 
 type ViewType = 'board' | 'timelog' | 'calendar' | 'recap';
 
@@ -90,6 +97,15 @@ interface UpcomingTodo {
   title: string;
   date: string;
   task: TaskRecord;
+  todo: TaskTodoRecord;
+  assignees: UserOption[];
+  project: string;
+}
+
+interface UpcomingTodoGroup {
+  user: UserOption;
+  todos: UpcomingTodo[];
+  expanded: boolean;
 }
 
 interface TimelogTimelineLog {
@@ -101,6 +117,13 @@ interface TimelogTimelineLog {
   startTime: number;
   endTime: number;
   files: TimelogFileRecord[];
+  record: TimelogRecord;
+}
+
+interface TimelogPopoverState {
+  log: TimelogTimelineLog;
+  top: number;
+  left: number;
 }
 
 interface TimelogTimelineUser {
@@ -119,8 +142,10 @@ interface TimelogTimelineUser {
     FormsModule,
     DragDropModule,
     FcIconComponent,
+    DropdownSelectComponent,
     TaskDialogComponent,
     GsapModalDirective,
+    UpcomingUserSeparatorComponent,
   ],
   templateUrl: './task-list.component.html',
 })
@@ -137,7 +162,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
   private readonly pendingRealtimeTaskFetches = new Set<string>();
   private readonly validStatuses = new Set<TaskStatus>(TASK_STATUSES);
   private readonly timelineStartHour = 7;
-  private readonly timelineEndHour = 24;
+  private readonly timelineEndHour = 17;
   private suppressBoardCardClick = false;
 
   readonly viewTabs = [
@@ -207,13 +232,6 @@ export class TaskListComponent implements OnInit, OnDestroy {
     '15:00',
     '16:00',
     '17:00',
-    '18:00',
-    '19:00',
-    '20:00',
-    '21:00',
-    '22:00',
-    '23:00',
-    '24:00',
   ];
   get timelineSegments(): number {
     return this.timeSlots.length - 1;
@@ -221,6 +239,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
   timelogUsers: TimelogTimelineUser[] = [];
   isLoadingTimelogs = false;
   timelogErrorMessage = '';
+  activeTimelogPopover: TimelogPopoverState | null = null;
   previewImage: { src: string; alt: string } | null = null;
 
   readonly calendarWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -246,7 +265,11 @@ export class TaskListComponent implements OnInit, OnDestroy {
   calendarWeeks = this.createCalendar(this.selectedCalendarYear, this.selectedCalendarMonth);
   calendarTasks: TaskRecord[] = [];
   upcomingTasks: UpcomingTodo[] = [];
+  upcomingTodoGroups: UpcomingTodoGroup[] = [];
   recapRows: RecapRow[] = [];
+  private recapTimerId?: ReturnType<typeof setInterval>;
+  private latestTimelogs: TimelogRecord[] = [];
+  private timelineClockTick = Date.now();
   isMyTaskMode = this.permission.isMember();
   users: UserOption[] = [];
   selectedUserId = this.permission.isManager() ? '' : String(this.getCurrentUserId() ?? '');
@@ -254,7 +277,9 @@ export class TaskListComponent implements OnInit, OnDestroy {
   selectedProjectId = '';
   selectedProject: ProjectOption | null = null;
   isProjectComboboxOpen = false;
+  isUserComboboxOpen = false;
   isLoadingProjects = false;
+  isRecentlyUpdatedMode = false;
   readonly isManager = this.permission.isManager();
   readonly isMember = this.permission.isMember();
 
@@ -265,6 +290,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.loadTasks();
     this.loadCalendarTasks();
     this.loadTimelogs();
+    this.startRecapTimer();
     this.joinSelectedProject();
     this.notificationRouteSubscription = this.route.queryParamMap.subscribe((params) => {
       const taskId = params.get('task_id');
@@ -281,6 +307,9 @@ export class TaskListComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.notificationRouteSubscription?.unsubscribe();
     this.realtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    if (this.recapTimerId) {
+      clearInterval(this.recapTimerId);
+    }
   }
 
   private createCalendar(year: number, month: number): CalendarDay[][] {
@@ -402,6 +431,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.isTaskDialogOpen = visible;
     if (!visible) {
       this.selectedTaskTodoId = null;
+      this.selectedTaskDialogTask = null;
     }
   }
 
@@ -414,10 +444,15 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
   onTaskUpdated(task: TaskRecord) {
     this.upsertTaskRecord(task);
+    this.selectedTaskDialogTask = {
+      ...task,
+      labels: this.getTaskLabels(task),
+    };
+    this.selectedTaskDialogStatus = this.getTaskBoardStatus(task);
+    this.selectedTaskDialogOrderIndex = Number(task.order_index ?? 0);
     this.populateBoard(this.allTasks);
     this.populateUpcomingTodos();
     this.loadCalendarTasks();
-    this.selectedTaskDialogTask = null;
   }
 
   onTaskDeleted(taskId: number | string) {
@@ -512,6 +547,70 @@ export class TaskListComponent implements OnInit, OnDestroy {
     return log.id ?? index;
   }
 
+  openTimelogPopover(log: TimelogTimelineLog, user: TimelogTimelineUser, event: MouseEvent): void {
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    const container = target.closest('[data-timelog-container]') as HTMLElement | null;
+    const scroller = target.closest('[data-timelog-scroll]') as HTMLElement | null;
+    const containerRect = container?.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    const width = 220;
+    const rawLeft = containerRect
+      ? rect.left - containerRect.left + (scroller?.scrollLeft ?? 0)
+      : rect.left;
+    const maxLeft = Math.max(8, (scroller?.scrollWidth ?? window.innerWidth) - width - 8);
+
+    this.activeTimelogPopover = {
+      log,
+      top: containerRect ? rect.bottom - containerRect.top + 8 : rect.bottom + 8,
+      left: Math.min(maxLeft, Math.max(8, rawLeft)),
+    };
+
+    window.setTimeout(() => {
+      const popper = document.querySelector('[data-timelog-popover]');
+      if (popper) {
+        gsap.fromTo(
+          popper,
+          { autoAlpha: 0, y: 6 },
+          { autoAlpha: 1, y: 0, duration: 0.18, ease: 'power2.out' },
+        );
+      }
+    });
+  }
+
+  closeTimelogPopover(): void {
+    const popper = document.querySelector('[data-timelog-popover]');
+    if (!popper) {
+      this.activeTimelogPopover = null;
+      return;
+    }
+
+    gsap.to(popper, {
+      autoAlpha: 0,
+      y: 6,
+      duration: 0.14,
+      ease: 'power2.inOut',
+      onComplete: () => {
+        this.activeTimelogPopover = null;
+      },
+    });
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest('[data-timelog-popover]') ||
+      target?.closest('[data-timelog-bar]')
+    ) {
+      return;
+    }
+
+    if (this.activeTimelogPopover) {
+      this.closeTimelogPopover();
+    }
+  }
+
   trackTimeSlotByValue(_: number, time: string): string {
     return time;
   }
@@ -522,6 +621,31 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
   getTimelogFilePhoto(file: TimelogFileRecord): string | null {
     return getApiMediaUrl(file.photo);
+  }
+
+  getTimelogPopoverStart(log: TimelogTimelineLog): string {
+    return this.formatTime(log.record.start);
+  }
+
+  getTimelogPopoverEnd(log: TimelogTimelineLog): string {
+    return this.isActiveTimelogRecord(log.record) ? '-' : this.formatTime(log.record.end);
+  }
+
+  getTimelogPopoverDuration(log: TimelogTimelineLog): string {
+    if (this.isActiveTimelogRecord(log.record)) {
+      return this.formatElapsed(log.record.start);
+    }
+
+    const loggedMinutes = Number(log.record.minuted_logged);
+    return this.formatMinutes(
+      Number.isFinite(loggedMinutes) && loggedMinutes > 0
+        ? Math.round(loggedMinutes)
+        : this.calculateMinuteDiff(log.record.start, log.record.end),
+    );
+  }
+
+  getTimelogPopoverStatus(log: TimelogTimelineLog): string {
+    return this.getTimelogStatusLabel(log.record);
   }
 
   openImagePreview(src: string | null, alt = 'Timelog attachment'): void {
@@ -560,20 +684,43 @@ export class TaskListComponent implements OnInit, OnDestroy {
     return todo.id ?? index;
   }
 
+  trackUpcomingGroupByUser(index: number, group: UpcomingTodoGroup): number | string {
+    return group.user.id ?? index;
+  }
+
   trackRecapRowById(index: number, row: RecapRow): string {
     return `${row.assignee}-${row.todo}-${index}`;
   }
 
+  toggleUpcomingGroup(group: UpcomingTodoGroup): void {
+    group.expanded = !group.expanded;
+  }
+
+  openUpcomingTodo(todo: UpcomingTodo): void {
+    this.selectedTaskTodoId = todo.todo.id ?? null;
+    this.openCalendarTask(todo.task);
+  }
+
   onSelectedUserChange(userId: string): void {
     this.selectedUserId = userId;
+    this.isUserComboboxOpen = false;
     this.isMyTaskMode = Boolean(userId);
     this.loadTasks();
     this.loadCalendarTasks();
     this.loadTimelogs();
   }
 
+  onSelectedUserDropdownChange(value: DropdownSelectValue): void {
+    this.onSelectedUserChange(value === null || value === undefined ? '' : String(value));
+  }
+
+  toggleUserCombobox(): void {
+    this.isUserComboboxOpen = !this.isUserComboboxOpen;
+  }
+
   toggleProjectCombobox(): void {
     this.isProjectComboboxOpen = !this.isProjectComboboxOpen;
+    this.isUserComboboxOpen = false;
 
     if (!this.projects.length && !this.isLoadingProjects) {
       this.loadProjects();
@@ -587,6 +734,14 @@ export class TaskListComponent implements OnInit, OnDestroy {
     this.joinSelectedProject();
     this.loadTasks();
     this.loadCalendarTasks();
+  }
+
+  onSelectedProjectDropdownChange(value: DropdownSelectValue): void {
+    const selectedId = value === null || value === undefined ? '' : String(value);
+    const project = selectedId
+      ? this.projects.find((item) => String(item.id) === selectedId) || null
+      : null;
+    this.selectProject(project);
   }
 
   previousCalendarMonth(): void {
@@ -629,8 +784,49 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
 
   getProjectPhoto(project: ProjectOption | null | undefined): string {
-    const photo = project?.photo_url || project?.photo || project?.avatar || project?.image;
-    return getApiMediaUrl(photo) || '';
+    return getFirstMediaUrl(project) || '';
+  }
+
+  getSelectedUser(): UserOption | undefined {
+    return this.users.find((user) => String(user.id) === String(this.selectedUserId));
+  }
+
+  getSelectedUserLabel(): string {
+    return this.selectedUserId
+      ? this.getUserLabel(this.getSelectedUser(), this.selectedUserId)
+      : 'All Users';
+  }
+
+  getUserLabel(user: UserOption | undefined, fallback?: number | string): string {
+    return user?.name || user?.username || user?.email || `User #${fallback ?? '-'}`;
+  }
+
+  getUserInitialOption(user: UserOption | undefined, fallback?: number | string): string {
+    return this.getUserLabel(user, fallback).trim().slice(0, 1).toUpperCase() || '?';
+  }
+
+  getProjectSelectOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Projects', initial: 'A' },
+      ...this.projects.map((project) => ({
+        value: project.id,
+        label: this.getProjectName(project),
+        imageUrl: this.getProjectPhoto(project),
+        initial: this.getProjectInitial(project),
+      })),
+    ];
+  }
+
+  getUserSelectOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Users', initial: 'A' },
+      ...this.users.map((user) => ({
+        value: user.id,
+        label: this.getUserLabel(user, user.id),
+        imageUrl: this.getUserPhoto(user),
+        initial: this.getUserInitialOption(user),
+      })),
+    ];
   }
 
   getCalendarDayTasks(day: CalendarDay): TaskRecord[] {
@@ -675,6 +871,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     forkJoin({
       tasks: this.taskService.getTasks(this.getTaskFilterUserId(), {
         projectId: this.selectedProjectId || undefined,
+        recentlyUpdatedDays: this.isRecentlyUpdatedMode ? 5 : undefined,
       }),
       taskTodos: this.taskService.getTaskTodos(),
       labels: this.taskService.getTaskLabels(),
@@ -695,6 +892,23 @@ export class TaskListComponent implements OnInit, OnDestroy {
         this.isLoadingTasks = false;
       },
     });
+  }
+
+  toggleRecentlyUpdatedMode(): void {
+    this.isRecentlyUpdatedMode = !this.isRecentlyUpdatedMode;
+    this.loadTasks();
+  }
+
+  reloadTasks(): void {
+    this.loadTasks();
+  }
+
+  getBoardEmptyText(column: TaskColumn): string {
+    if (this.isRecentlyUpdatedMode) {
+      return 'No tasks updated in the last 5 days.';
+    }
+
+    return column.emptyText || 'No Task';
   }
 
   private loadCalendarTasks(): void {
@@ -734,6 +948,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
     this.timelogService.getTimelogs().subscribe({
       next: (timelogs) => {
+        this.latestTimelogs = timelogs;
         const filteredTimelogs = this.filterRecordsBySelectedUser(timelogs);
         this.timelogUsers = this.mapTimelogsToTimeline(filteredTimelogs);
         this.recapRows = this.mapTimelogsToRecapRows(filteredTimelogs);
@@ -865,10 +1080,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.allTasks = [
-      task,
-      ...this.allTasks.filter((item) => String(item.id) !== String(task.id)),
-    ];
+    this.allTasks = [task, ...this.allTasks.filter((item) => String(item.id) !== String(task.id))];
   }
 
   private updateTaskEmbeddedTodo(task: TaskRecord, todo: TaskTodoRecord): TaskRecord {
@@ -1019,11 +1231,13 @@ export class TaskListComponent implements OnInit, OnDestroy {
     }
 
     const previousTask = { ...card.task };
+    const movedAt = new Date().toISOString();
     const payload: UpdateTaskRequest = {
       status: targetColumn.status,
       board_column: targetColumn.status,
       order_index: orderIndex,
-      moved_at: new Date().toISOString(),
+      moved_at: movedAt,
+      ...(targetColumn.status === 'completed' ? { completed_at: movedAt } : {}),
     };
 
     card.task = {
@@ -1082,10 +1296,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
     });
   }
 
-  private openNotificationTask(
-    taskId: number | string,
-    taskTodoId: number | string | null,
-  ): void {
+  private openNotificationTask(taskId: number | string, taskTodoId: number | string | null): void {
     this.activeView = 'board';
     this.selectedTaskTodoId = taskTodoId;
     this.isTaskDialogOpen = true;
@@ -1134,6 +1345,11 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
 
   private createFallbackTaskMember(value: number | string | undefined): TaskCardMember {
+    const matchedUser = this.users.find((user) => String(user.id) === String(value));
+    if (matchedUser) {
+      return this.mapUserToTaskMember(matchedUser);
+    }
+
     const label = `User #${value ?? '-'}`;
 
     return {
@@ -1145,12 +1361,16 @@ export class TaskListComponent implements OnInit, OnDestroy {
   }
 
   private getInitial(value: number | string | undefined): string {
-    return String(value ?? '?').trim().slice(0, 1).toUpperCase() || '?';
+    return (
+      String(value ?? '?')
+        .trim()
+        .slice(0, 1)
+        .toUpperCase() || '?'
+    );
   }
 
-  private getUserPhoto(user: UserOption | undefined): string {
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
-    return getApiMediaUrl(photo) || '';
+  getUserPhoto(user: UserOption | undefined): string {
+    return getFirstMediaUrl(user) || '';
   }
 
   private getTaskTodos(task: TaskRecord): TaskTodoRecord[] {
@@ -1200,12 +1420,56 @@ export class TaskListComponent implements OnInit, OnDestroy {
     );
   }
 
+  private getTaskProjectName(task: TaskRecord): string {
+    const project = this.getTaskProject(task);
+    return project ? this.getProjectName(project) : '-';
+  }
+
+  private getTodoAssignees(todo: TaskTodoRecord): UserOption[] {
+    const users = todo.users?.length ? todo.users : todo.user ? [todo.user] : [];
+    const userById = new Map<number, UserOption>();
+
+    users.forEach((user) => {
+      const id = Number(user.id);
+      if (Number.isInteger(id) && id > 0) {
+        userById.set(id, user);
+      }
+    });
+
+    const ids = [
+      ...this.parseIdList(todo.user_ids),
+      Number(todo.user_id),
+      Number(todo.created_by),
+    ].filter((id) => Number.isInteger(id) && id > 0);
+
+    ids.forEach((id) => {
+      if (userById.has(id)) {
+        return;
+      }
+
+      userById.set(
+        id,
+        this.users.find((user) => Number(user.id) === id) || {
+          id,
+          username: `User #${id}`,
+          email: '',
+        },
+      );
+    });
+
+    return Array.from(userById.values());
+  }
+
   private parseIdList(value: Array<number | string> | string | undefined): number[] {
     return parseTaskIdList(value);
   }
 
   private isTodoCompleted(todo: TaskTodoRecord): boolean {
-    return todo.status === 'completed' || Number(todo.progress || 0) >= 100;
+    return (
+      todo.status === 'completed' ||
+      todo.status === 'completed_but_overdue' ||
+      Number(todo.progress || 0) >= 100
+    );
   }
 
   private formatTaskDate(dateValue?: string): string {
@@ -1224,6 +1488,18 @@ export class TaskListComponent implements OnInit, OnDestroy {
     }).format(date);
   }
 
+  private formatTime(dateValue?: string): string {
+    const date = this.parseDate(dateValue);
+    if (!date) {
+      return '-';
+    }
+
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
   private normalizeProgress(value: number | string | undefined): number {
     const progress = Number(value ?? 0);
     if (!Number.isFinite(progress)) {
@@ -1237,29 +1513,82 @@ export class TaskListComponent implements OnInit, OnDestroy {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    this.upcomingTasks = this.filterRecordsBySelectedUser(this.allTaskTodos)
-      .map((todo) => {
-        const task =
-          todo.task || this.allTasks.find((item) => Number(item.id) === Number(todo.task_id));
-        const dueDate = this.parseDate(task?.due_date);
-
-        if (!task || !dueDate || dueDate.getTime() < todayStart.getTime()) {
-          return null;
+    this.upcomingTasks = this.allTaskTodos
+      .filter((todo) => !this.isTodoCompleted(todo))
+      .map((todo) => this.mapTodoToUpcoming(todo))
+      .filter((todo): todo is UpcomingTodo => Boolean(todo))
+      .filter((todo) => {
+        const dueDate = this.parseDate(todo.task.due_date);
+        return !dueDate || dueDate.getTime() >= todayStart.getTime();
+      })
+      .filter((todo) => {
+        if (this.isManager) {
+          return true;
         }
 
-        return {
-          id: todo.id ?? `${task.id}-${todo.label}`,
-          title: todo.label || task.title || task.name || `Todo #${todo.id ?? '-'}`,
-          date: this.formatTaskDate(task.due_date),
-          task,
-        };
+        const currentUserId = this.getCurrentUserId();
+        return Boolean(
+          currentUserId &&
+            todo.assignees.some((user) => Number(user.id) === Number(currentUserId)),
+        );
       })
-      .filter((todo): todo is UpcomingTodo => Boolean(todo))
       .sort((first, second) => {
         const firstDate = this.parseDate(first.task.due_date)?.getTime() ?? 0;
         const secondDate = this.parseDate(second.task.due_date)?.getTime() ?? 0;
         return firstDate - secondDate;
       });
+
+    this.upcomingTodoGroups = this.groupUpcomingTodosByUser(this.upcomingTasks);
+  }
+
+  private mapTodoToUpcoming(todo: TaskTodoRecord): UpcomingTodo | null {
+    const task = todo.task || this.allTasks.find((item) => Number(item.id) === Number(todo.task_id));
+    if (!task) {
+      return null;
+    }
+
+    return {
+      id: todo.id ?? `${task.id}-${todo.label}`,
+      title: todo.label || task.title || task.name || `Todo #${todo.id ?? '-'}`,
+      date: this.formatTaskDate(task.due_date),
+      task,
+      todo,
+      assignees: this.getTodoAssignees(todo),
+      project: this.getTaskProjectName(task),
+    };
+  }
+
+  private groupUpcomingTodosByUser(todos: UpcomingTodo[]): UpcomingTodoGroup[] {
+    const expandedUserIds = new Set(
+      this.upcomingTodoGroups.filter((group) => group.expanded).map((group) => Number(group.user.id)),
+    );
+    const grouped = new Map<number, UpcomingTodoGroup>();
+
+    todos.forEach((todo) => {
+      todo.assignees.forEach((user) => {
+        const userId = Number(user.id);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          return;
+        }
+
+        const group =
+          grouped.get(userId) ||
+          ({
+            user,
+            todos: [],
+            expanded: expandedUserIds.has(userId),
+          } satisfies UpcomingTodoGroup);
+
+        group.todos.push(todo);
+        grouped.set(userId, group);
+      });
+    });
+
+    return Array.from(grouped.values()).sort((first, second) =>
+      this.getUserLabel(first.user, first.user.id).localeCompare(
+        this.getUserLabel(second.user, second.user.id),
+      ),
+    );
   }
 
   private mapTimelogsToTimeline(records: TimelogRecord[]): TimelogTimelineUser[] {
@@ -1340,6 +1669,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
       startTime,
       endTime,
       files: this.getTimelogFiles(record),
+      record,
     };
   }
 
@@ -1364,12 +1694,9 @@ export class TaskListComponent implements OnInit, OnDestroy {
       .map((record) => {
         const taskTodo = record.task_todo;
         const task =
-          taskTodo?.task ||
+          (taskTodo?.task as TaskRecord | undefined) ||
           this.allTasks.find((item) => Number(item.id) === Number(taskTodo?.task_id));
-        const project = taskTodo?.task?.project;
-        const minutes = Number(
-          record.minuted_logged ?? this.calculateMinuteDiff(record.start, record.end),
-        );
+        const minutes = Number(record.minuted_logged);
 
         return {
           assignee: this.getTimelogUserName(record),
@@ -1378,15 +1705,29 @@ export class TaskListComponent implements OnInit, OnDestroy {
           status: this.getTimelogStatusLabel(record),
           created: record.created_at ? 1 : 0,
           completed: record.status === 'finish' ? 1 : 0,
-          project:
-            project?.label ||
-            project?.name ||
-            task?.title ||
-            task?.name ||
-            (taskTodo?.task_id ? `Task #${taskTodo.task_id}` : '-'),
-          timeSpend: this.formatMinutes(minutes),
+          project: task ? this.getTaskProjectName(task) : '-',
+          timeSpend: this.isActiveTimelogRecord(record)
+            ? this.formatElapsed(record.start)
+            : this.formatMinutes(
+                Number.isFinite(minutes)
+                  ? Math.round(minutes)
+                  : this.calculateMinuteDiff(record.start, record.end),
+              ),
         };
       });
+  }
+
+  private startRecapTimer(): void {
+    this.recapTimerId = setInterval(() => {
+      this.timelineClockTick = Date.now();
+      if (this.activeView !== 'recap' || !this.latestTimelogs.length) {
+        return;
+      }
+
+      this.recapRows = this.mapTimelogsToRecapRows(
+        this.filterRecordsBySelectedUser(this.latestTimelogs),
+      );
+    }, 1000);
   }
 
   private isTimelogToday(record: TimelogRecord): boolean {
@@ -1442,6 +1783,25 @@ export class TaskListComponent implements OnInit, OnDestroy {
     return Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
   }
 
+  private isActiveTimelogRecord(record: TimelogRecord): boolean {
+    return (record.status || '').toLowerCase().trim() === 'active' || !record.end;
+  }
+
+  private formatElapsed(start?: string): string {
+    this.timelineClockTick;
+    const startDate = this.parseDate(start);
+    if (!startDate) {
+      return '00:00:00';
+    }
+
+    const totalSeconds = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return [hours, minutes, seconds].map((item) => String(item).padStart(2, '0')).join(':');
+  }
+
   private formatMinutes(minutes: number): string {
     if (!Number.isFinite(minutes) || minutes <= 0) {
       return '0 min';
@@ -1469,9 +1829,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
           image?: string;
         }
       | undefined;
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
-
-    return getApiMediaUrl(photo) || 'images/home-user.png';
+    return getFirstMediaUrl(user) || 'images/home-user.png';
   }
 
   private parseDate(value?: string): Date | null {
@@ -1516,7 +1874,18 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
     this.taskService.getUsers().subscribe({
       next: (users) => {
-        this.users = users;
+        this.users = users
+          .map((user) => ({
+            ...user,
+            id: Number(user.id),
+            username: user.username || user.name || user.email || `User #${user.id}`,
+          }))
+          .filter((user) => Number.isInteger(user.id) && user.id > 0);
+
+        if (this.allTasks.length) {
+          this.populateBoard(this.allTasks);
+          this.populateUpcomingTodos();
+        }
       },
       error: () => {
         this.users = [];
@@ -1544,6 +1913,7 @@ export class TaskListComponent implements OnInit, OnDestroy {
 
         if (this.allTasks.length) {
           this.populateBoard(this.allTasks);
+          this.populateUpcomingTodos();
         }
 
         this.isLoadingProjects = false;

@@ -1,9 +1,6 @@
 <div class="h-dvh overflow-hidden bg-[#2F4156] text-tertiary-50">
   <div class="flex h-dvh min-w-0">
-    <app-sidebar
-      #sidebar
-      (collapsedChange)="isSidebarCollapsed = $event"
-    ></app-sidebar>
+    <app-sidebar #sidebar (collapsedChange)="isSidebarCollapsed = $event"></app-sidebar>
     <div class="flex min-h-dvh min-w-0 flex-1 flex-col">
       <app-header
         [isSidebarCollapsed]="isSidebarCollapsed"
@@ -18,8 +15,12 @@
   <div
     *ngIf="activeTimelogService.activeTimelog() as activeTimelog"
     class="fixed bottom-4 left-1/2 z-70 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-full bg-[#94A3B8] px-4 py-2 text-black shadow-sm lg:bottom-8 lg:gap-4"
+    [class.bg-red-600]="activeTimelog.isOverdue"
+    [class.text-white]="activeTimelog.isOverdue"
   >
-    <span class="text-base font-bold text-black">{{ activeTimelog.elapsed }}</span>
+    <span class="text-base font-bold text-black" [class.text-white]="activeTimelog.isOverdue">
+      {{ activeTimelog.elapsed }}
+    </span>
     <button
       type="button"
       class="rounded-full bg-white px-5 py-2 text-2xs font-bold text-tertiary-950 disabled:cursor-not-allowed disabled:opacity-70"
@@ -74,10 +75,7 @@
         />
       </label>
       <p *ngIf="endFileError" class="mt-2 text-xs font-bold text-red-700">{{ endFileError }}</p>
-      <div
-        *ngIf="endPhotoPreview"
-        class="mt-3 h-28 w-28 overflow-hidden rounded-md bg-[#d9d9d9]"
-      >
+      <div *ngIf="endPhotoPreview" class="mt-3 h-28 w-28 overflow-hidden rounded-md bg-[#d9d9d9]">
         <img [src]="endPhotoPreview" alt="End timelog preview" class="h-full w-full object-cover" />
       </div>
 
@@ -92,7 +90,7 @@
         </button>
         <button
           type="button"
-          class="h-10 rounded-md bg-tertiary-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          class="h-10 rounded-md bg-green-600 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
           [disabled]="activeTimelogService.isEnding()"
           (click)="submitEndTimelog('finish')"
         >

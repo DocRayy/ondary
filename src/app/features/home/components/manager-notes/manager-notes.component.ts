@@ -42,7 +42,10 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
 
   formTitle = '';
   formDetail = '';
-  selectedUserIds: Record<string, boolean> = {};
+  selectedUsers: MemberRecord[] = [];
+  userSearch = '';
+  sendToAllUsers = false;
+  isUserPickerOpen = false;
 
   ngOnInit(): void {
     this.managerNoteRouteSubscription = this.route.queryParamMap.subscribe((params) => {
@@ -62,7 +65,10 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
     this.editingNote.set(null);
     this.formTitle = '';
     this.formDetail = '';
-    this.selectedUserIds = {};
+    this.selectedUsers = [];
+    this.userSearch = '';
+    this.sendToAllUsers = false;
+    this.isUserPickerOpen = false;
     this.showForm.set(true);
     this.errorMessage.set('');
   }
@@ -73,7 +79,12 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
     this.editingNote.set(note);
     this.formTitle = note.title ?? '';
     this.formDetail = note.description ?? note.message ?? '';
-    this.selectedUserIds = userId ? { [userId]: true } : {};
+    this.selectedUsers = userId
+      ? this.users().filter((user) => String(user.id) === String(userId))
+      : [];
+    this.userSearch = '';
+    this.sendToAllUsers = false;
+    this.isUserPickerOpen = false;
     this.showForm.set(true);
     this.errorMessage.set('');
   }
@@ -83,24 +94,30 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
     this.editingNote.set(null);
     this.formTitle = '';
     this.formDetail = '';
-    this.selectedUserIds = {};
+    this.selectedUsers = [];
+    this.userSearch = '';
+    this.sendToAllUsers = false;
+    this.isUserPickerOpen = false;
+  }
+
+  reloadNotes(): void {
+    this.loadNotes();
   }
 
   saveNote(): void {
     const title = this.formTitle.trim();
     const detail = this.formDetail.trim();
-    const userIds = Object.entries(this.selectedUserIds)
-      .filter(([, selected]) => selected)
-      .map(([id]) => Number(id))
+    const userIds = this.selectedUsers
+      .map((user) => Number(user.id))
       .filter((id) => Number.isInteger(id) && id > 0);
     const editingNote = this.editingNote();
 
-    if (!title || !userIds.length) {
-      this.errorMessage.set('Completed the title and select at least one user.');
+    if (!title || (!this.sendToAllUsers && !userIds.length)) {
+      this.errorMessage.set('Complete the title and select at least one user.');
       return;
     }
 
-    if (editingNote && userIds.length !== 1) {
+    if (editingNote && (this.sendToAllUsers || userIds.length !== 1)) {
       this.errorMessage.set('Select one user to edit the manager note.');
       return;
     }
@@ -132,6 +149,28 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
               ),
             );
             this.finishSaving(updatedNote);
+          },
+          error: (error) => {
+            const message = this.toastService.getErrorMessage(error, '');
+            this.errorMessage.set(message);
+            this.toastService.errorFrom(error);
+            this.saving.set(false);
+          },
+        });
+      return;
+    }
+
+    if (this.sendToAllUsers) {
+      this.managerNoteService
+        .createManagerNote({
+          send_to_all: true,
+          title,
+          ...(detail ? { description: detail } : {}),
+        })
+        .subscribe({
+          next: (response) => {
+            this.finishSaving(response);
+            this.loadNotes();
           },
           error: (error) => {
             const message = this.toastService.getErrorMessage(error, '');
@@ -235,11 +274,49 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
     return user.id ?? index;
   }
 
+  getFilteredUsers(): MemberRecord[] {
+    const query = this.userSearch.trim().toLowerCase();
+    const selectedIds = new Set(this.selectedUsers.map((user) => String(user.id)));
+
+    return this.users()
+      .filter((user) => !selectedIds.has(String(user.id)))
+      .filter((user) => {
+        if (!query) {
+          return true;
+        }
+
+        return [user.name, user.username, user.email]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
+      })
+      .slice(0, 8);
+  }
+
+  selectUser(user: MemberRecord): void {
+    if (!user.id || this.sendToAllUsers) {
+      return;
+    }
+
+    this.selectedUsers = [...this.selectedUsers, user];
+    this.userSearch = '';
+    this.isUserPickerOpen = false;
+  }
+
+  removeSelectedUser(user: MemberRecord): void {
+    this.selectedUsers = this.selectedUsers.filter((item) => String(item.id) !== String(user.id));
+  }
+
+  onSendToAllUsersChange(): void {
+    if (this.sendToAllUsers) {
+      this.selectedUsers = [];
+      this.userSearch = '';
+      this.isUserPickerOpen = false;
+    }
+  }
+
   isHighlightedNote(note: ManagerNoteRecord): boolean {
     return Boolean(
-      this.highlightedNoteId() &&
-        note.id &&
-        String(note.id) === String(this.highlightedNoteId()),
+      this.highlightedNoteId() && note.id && String(note.id) === String(this.highlightedNoteId()),
     );
   }
 
@@ -259,6 +336,7 @@ export class ManagerNotesComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.notes.set([]);
+        this.errorMessage.set('Failed to load manager notes.');
         this.loading.set(false);
       },
     });

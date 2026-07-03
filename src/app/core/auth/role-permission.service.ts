@@ -2,6 +2,15 @@ import { Injectable, inject } from '@angular/core';
 import { AuthService } from './auth.service';
 
 export type UserRole = 'member' | 'admin' | 'manager';
+export type AppMenu =
+  | 'dashboard'
+  | 'task'
+  | 'timelog'
+  | 'projects'
+  | 'members'
+  | 'reports'
+  | 'audit-log'
+  | 'backup-restore';
 
 @Injectable({
   providedIn: 'root',
@@ -30,20 +39,22 @@ export class RolePermissionService {
     return this.getRole() === 'manager';
   }
 
-  canAccessMenu(
-    menu: 'dashboard' | 'task' | 'timelog' | 'projects' | 'members' | 'reports',
-  ): boolean {
+  canAccessMenu(menu: AppMenu): boolean {
     const role = this.getRole();
 
     if (role === 'manager') {
-      return true;
+      return ['dashboard', 'task', 'timelog', 'projects', 'members', 'reports'].includes(menu);
     }
 
     if (role === 'admin') {
-      return menu === 'dashboard' || menu === 'members';
+      return ['members', 'audit-log', 'backup-restore'].includes(menu);
     }
 
     return ['dashboard', 'task', 'timelog', 'members', 'reports'].includes(menu);
+  }
+
+  getDefaultRoute(): string {
+    return this.isAdmin() ? '/members/list' : '/';
   }
 
   canManageMembers(): boolean {

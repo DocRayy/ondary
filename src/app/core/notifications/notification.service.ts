@@ -1,5 +1,5 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Subject, map, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
@@ -42,6 +42,13 @@ type OndaryDesktopBridge = {
   notify?: (payload: { title?: string; body?: string; message?: string }) => Promise<boolean>;
 };
 
+export type DesktopNotificationResult =
+  | 'browser-shown'
+  | 'electron-shown'
+  | 'permission-denied'
+  | 'unsupported'
+  | 'failed';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -53,6 +60,9 @@ export class NotificationService {
 
   private readonly createdSubject = new Subject<NotificationItem>();
   readonly created$ = this.createdSubject.asObservable();
+  readonly browserPermission = signal<NotificationPermission | 'unsupported'>(
+    this.getBrowserNotificationPermission(),
+  );
 
   constructor() {
     this.realtimeService.notificationCreated$.subscribe((notification) => {
@@ -69,7 +79,6 @@ export class NotificationService {
       return;
     }
 
-    this.requestBrowserNotificationPermission();
     this.realtimeService.connect();
   }
 
@@ -100,35 +109,66 @@ export class NotificationService {
     );
   }
 
-  async showDesktopNotification(notification: NotificationItem): Promise<void> {
+  async showDesktopNotification(notification: NotificationItem): Promise<DesktopNotificationResult> {
     const title = notification.title || 'Ondary';
     const body = notification.message || '';
 
     const desktopBridge = this.getDesktopBridge();
     if (desktopBridge?.notify) {
-      await desktopBridge.notify({ title, body, message: body }).catch(() => false);
-      return;
+      const notified = await desktopBridge.notify({ title, body, message: body }).catch(() => false);
+      if (notified) {
+        return 'electron-shown';
+      }
     }
 
     if (!('Notification' in window)) {
-      return;
+      this.browserPermission.set('unsupported');
+      return 'unsupported';
     }
 
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission().catch(() => 'denied');
+    this.browserPermission.set(Notification.permission);
+
+    if (Notification.permission !== 'granted') {
+      return 'permission-denied';
     }
 
-    if (Notification.permission === 'granted') {
+    try {
       new Notification(title, { body });
+      return 'browser-shown';
+    } catch {
+      return 'failed';
     }
   }
 
-  private requestBrowserNotificationPermission(): void {
-    if (!('Notification' in window) || Notification.permission !== 'default') {
-      return;
+  async showTestDesktopNotification(): Promise<DesktopNotificationResult> {
+    return this.showDesktopNotification({
+      title: 'Ondary notification test',
+      message: 'Desktop alert successfull.',
+    });
+  }
+
+  async enableBrowserNotifications(): Promise<NotificationPermission | 'unsupported'> {
+    if (!('Notification' in window)) {
+      this.browserPermission.set('unsupported');
+      return 'unsupported';
     }
 
-    void Notification.requestPermission().catch(() => 'denied');
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission().catch(() => 'denied' as const);
+      this.browserPermission.set(permission);
+      return permission;
+    }
+
+    this.browserPermission.set(Notification.permission);
+    return Notification.permission;
+  }
+
+  private getBrowserNotificationPermission(): NotificationPermission | 'unsupported' {
+    if (!('Notification' in window)) {
+      return 'unsupported';
+    }
+
+    return Notification.permission;
   }
 
   private getDesktopBridge(): OndaryDesktopBridge | undefined {

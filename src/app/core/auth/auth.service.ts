@@ -75,11 +75,11 @@ export class AuthService {
       );
   }
 
-  logout() {
+  logout(): Promise<boolean> {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);
     this.authChangedSubject.next(null);
-    this.router.navigate(['/login']);
+    return this.router.navigate(['/login']);
   }
 
   isAuthenticated() {

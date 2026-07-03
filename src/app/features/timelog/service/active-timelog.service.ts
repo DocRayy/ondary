@@ -2,6 +2,12 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subject, finalize, map, of, switchMap, tap } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import {
+  RealtimeService,
+  RealtimeTaskTodoOverduePayload,
+} from '../../../core/realtime/realtime.service';
+import { NotificationService } from '../../../core/notifications/notification.service';
+import { ToastService } from '../../../shared/components/toast/toast.service';
+import {
   CreateTimelogRequest,
   TimelogRecord,
   TimelogStatus,
@@ -12,6 +18,7 @@ import { TimelogService } from './timelog.service';
 export interface ActiveTimelogState {
   record: TimelogRecord;
   elapsed: string;
+  isOverdue?: boolean;
 }
 
 @Injectable({
@@ -20,6 +27,9 @@ export interface ActiveTimelogState {
 export class ActiveTimelogService {
   private readonly authService = inject(AuthService);
   private readonly timelogService = inject(TimelogService);
+  private readonly realtimeService = inject(RealtimeService);
+  private readonly notificationService = inject(NotificationService);
+  private readonly toastService = inject(ToastService);
   private readonly startSoundUrl = new URL('sound/beep-timelog.mp3', document.baseURI).toString();
   private readonly activeTimelogSignal = signal<ActiveTimelogState | null>(null);
   private readonly isLoadingSignal = signal(false);
@@ -28,6 +38,7 @@ export class ActiveTimelogService {
   private readonly isEndDialogOpenSignal = signal(false);
   private readonly finishedTaskTodoIdsSignal = signal<Set<number>>(new Set());
   private readonly pausedTaskTodoTimelogsSignal = signal<Map<number, TimelogRecord>>(new Map());
+  private readonly overdueTimelogIdsSignal = signal<Set<number>>(new Set());
   private readonly timelogEndedSubject = new Subject<TimelogRecord>();
   private elapsedTimerId?: ReturnType<typeof setInterval>;
 
@@ -39,6 +50,7 @@ export class ActiveTimelogService {
   readonly timelogEnded$ = this.timelogEndedSubject.asObservable();
 
   constructor() {
+    this.setupOverdueSubscriptions();
     this.startElapsedTimer();
   }
 
@@ -73,6 +85,7 @@ export class ActiveTimelogService {
               start: timelog.start || start,
             },
             elapsed: '00:00:00',
+            isOverdue: false,
           });
           this.playStartSound();
         }),
@@ -102,6 +115,13 @@ export class ActiveTimelogService {
             end: undefined,
           },
           elapsed: this.formatElapsed(timelog.start || record.start),
+          isOverdue: this.isRecordOverEstimate({
+            ...record,
+            ...timelog,
+            status: 'active',
+            start: timelog.start || record.start,
+            end: undefined,
+          }),
         });
         if (record.task_todo_id) {
           this.pausedTaskTodoTimelogsSignal.update((items) => {
@@ -169,48 +189,51 @@ export class ActiveTimelogService {
     }
 
     this.isEndingSignal.set(true);
-    return this.timelogService
-      .updateTimelog(activeTimelog.record.id, payload)
-      .pipe(
-        switchMap((timelog) => {
-          if (!photoFile) {
-            return of(timelog);
-          }
+    return this.timelogService.updateTimelog(activeTimelog.record.id, payload).pipe(
+      switchMap((timelog) => {
+        if (!photoFile) {
+          return of(timelog);
+        }
 
-          return this.timelogService
-            .uploadTimelogFile(activeTimelog.record.id!, photoFile, endNote)
-            .pipe(map(() => timelog));
-        }),
-        tap((timelog) => {
-          if (status === 'finish' && activeTimelog.record.task_todo_id) {
-            this.finishedTaskTodoIdsSignal.update((ids) =>
-              new Set(ids).add(Number(activeTimelog.record.task_todo_id)),
-            );
-            this.pausedTaskTodoTimelogsSignal.update((items) => {
-              const nextItems = new Map(items);
-              nextItems.delete(Number(activeTimelog.record.task_todo_id));
-              return nextItems;
+        return this.timelogService
+          .uploadTimelogFile(activeTimelog.record.id!, photoFile, endNote)
+          .pipe(map(() => timelog));
+      }),
+      tap((timelog) => {
+        if (status === 'finish' && activeTimelog.record.task_todo_id) {
+          this.finishedTaskTodoIdsSignal.update((ids) =>
+            new Set(ids).add(Number(activeTimelog.record.task_todo_id)),
+          );
+          this.pausedTaskTodoTimelogsSignal.update((items) => {
+            const nextItems = new Map(items);
+            nextItems.delete(Number(activeTimelog.record.task_todo_id));
+            return nextItems;
+          });
+        }
+
+        if (status === 'pause' && activeTimelog.record.task_todo_id) {
+          this.pausedTaskTodoTimelogsSignal.update((items) => {
+            const nextItems = new Map(items);
+            nextItems.set(Number(activeTimelog.record.task_todo_id), {
+              ...activeTimelog.record,
+              ...timelog,
+              status: 'pause',
             });
-          }
+            return nextItems;
+          });
+        }
 
-          if (status === 'pause' && activeTimelog.record.task_todo_id) {
-            this.pausedTaskTodoTimelogsSignal.update((items) => {
-              const nextItems = new Map(items);
-              nextItems.set(Number(activeTimelog.record.task_todo_id), {
-                ...activeTimelog.record,
-                ...timelog,
-                status: 'pause',
-              });
-              return nextItems;
-            });
-          }
-
-          this.activeTimelogSignal.set(null);
-          this.isEndDialogOpenSignal.set(false);
-          this.timelogEndedSubject.next(timelog);
-        }),
-        finalize(() => this.isEndingSignal.set(false)),
-      );
+        this.overdueTimelogIdsSignal.update((items) => {
+          const nextItems = new Set(items);
+          nextItems.delete(Number(activeTimelog.record.id));
+          return nextItems;
+        });
+        this.activeTimelogSignal.set(null);
+        this.isEndDialogOpenSignal.set(false);
+        this.timelogEndedSubject.next(timelog);
+      }),
+      finalize(() => this.isEndingSignal.set(false)),
+    );
   }
 
   isActiveTaskTodo(taskTodoId: number | string | undefined): boolean {
@@ -259,6 +282,7 @@ export class ActiveTimelogService {
         ? {
             record: activeRecord,
             elapsed: this.formatElapsed(activeRecord.start),
+            isOverdue: this.isRecordOverEstimate(activeRecord),
           }
         : null,
     );
@@ -274,8 +298,123 @@ export class ActiveTimelogService {
       this.activeTimelogSignal.set({
         ...activeTimelog,
         elapsed: this.formatElapsed(activeTimelog.record.start),
+        isOverdue:
+          activeTimelog.isOverdue ||
+          this.overdueTimelogIdsSignal().has(Number(activeTimelog.record.id)) ||
+          this.isRecordOverEstimate(activeTimelog.record),
       });
     }, 1000);
+  }
+
+  private setupOverdueSubscriptions(): void {
+    this.realtimeService.taskTodoOverdueWarning$.subscribe((payload) => {
+      if (!this.isPayloadForActiveTaskTodoTimelog(payload)) {
+        return;
+      }
+
+      const remainingMinutes = Math.max(0, Number(payload.remaining_minutes ?? 0));
+      const message =
+        payload.message || `Task todo will be overdue in ${remainingMinutes} minutes.`;
+
+      this.toastService.error({
+        title: payload.title || 'Task Todo Overdue Warning',
+        message,
+      });
+      void this.notificationService.showDesktopNotification({
+        title: payload.title || 'Task Todo Overdue Warning',
+        message,
+        type: 'task_todo_overdue_warning',
+        task_id: payload.task_id,
+        task_todo_id: payload.task_todo_id,
+      });
+    });
+
+    this.realtimeService.taskTodoOverdue$.subscribe((payload) => {
+      if (!this.isPayloadForActiveTaskTodoTimelog(payload)) {
+        return;
+      }
+
+      const message = payload.message || `${payload.todo_label || 'Task todo'} is overdue.`;
+      this.markActiveTimelogOverdue(payload);
+      this.toastService.error({
+        title: 'Task Todo Overdue',
+        message,
+      });
+      void this.notificationService.showDesktopNotification({
+        title: 'Task Todo Overdue',
+        message,
+        type: 'task_todo_overdue',
+        task_id: payload.task_id,
+        task_todo_id: payload.task_todo_id,
+      });
+    });
+  }
+
+  private isPayloadForActiveTaskTodoTimelog(payload: RealtimeTaskTodoOverduePayload): boolean {
+    const activeTimelog = this.activeTimelogSignal();
+    const currentUserId = Number(this.authService.getUser()?.id);
+    const payloadUserId = Number(payload.user_id);
+    const activeTimelogId = Number(activeTimelog?.record.id);
+    const payloadTimelogId = Number(payload.timelog_id);
+    const activeTaskTodoId = Number(activeTimelog?.record.task_todo_id);
+    const payloadTaskTodoId = Number(payload.task_todo_id);
+    const estimateMinutes = Number(payload.estimate_time_minutes ?? 0);
+
+    return Boolean(
+      activeTimelog?.record.task_todo_id &&
+      Number.isInteger(currentUserId) &&
+      Number.isInteger(payloadUserId) &&
+      currentUserId === payloadUserId &&
+      Number.isInteger(activeTimelogId) &&
+      Number.isInteger(payloadTimelogId) &&
+      activeTimelogId === payloadTimelogId &&
+      Number.isInteger(activeTaskTodoId) &&
+      Number.isInteger(payloadTaskTodoId) &&
+      activeTaskTodoId === payloadTaskTodoId &&
+      estimateMinutes > 0,
+    );
+  }
+
+  private markActiveTimelogOverdue(payload: RealtimeTaskTodoOverduePayload): void {
+    const activeTimelog = this.activeTimelogSignal();
+    if (!activeTimelog?.record.id) {
+      return;
+    }
+
+    this.overdueTimelogIdsSignal.update((items) =>
+      new Set(items).add(Number(activeTimelog.record.id)),
+    );
+    this.activeTimelogSignal.set({
+      ...activeTimelog,
+      record: {
+        ...activeTimelog.record,
+        task_todo: activeTimelog.record.task_todo
+          ? {
+              ...activeTimelog.record.task_todo,
+              estimate_time: payload.estimate_time ?? activeTimelog.record.task_todo.estimate_time,
+              estimate_time_minutes:
+                payload.estimate_time_minutes ??
+                activeTimelog.record.task_todo.estimate_time_minutes,
+              estimate_time_label:
+                payload.estimate_time_label ?? activeTimelog.record.task_todo.estimate_time_label,
+            }
+          : activeTimelog.record.task_todo,
+      },
+      isOverdue: true,
+    });
+  }
+
+  private isRecordOverEstimate(record: TimelogRecord): boolean {
+    if (!record.task_todo_id) {
+      return false;
+    }
+
+    const estimateMinutes = Number(record.task_todo?.estimate_time_minutes ?? 0);
+    if (!Number.isFinite(estimateMinutes) || estimateMinutes <= 0) {
+      return false;
+    }
+
+    return this.calculateMinuteDiff(record.start, new Date().toISOString()) > estimateMinutes;
   }
 
   private calculateMinuteDiff(start?: string, end?: string): number {

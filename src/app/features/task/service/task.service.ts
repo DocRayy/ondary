@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders, HttpParams, HttpResponse } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, throwError } from 'rxjs';
 import { AuthService } from '@app/core/auth/auth.service';
@@ -8,8 +8,11 @@ import {
   ApiCollectionResponse,
   ApiItemResponse,
   CreateTaskRequest,
+  CreateTaskCommentRequest,
   CreateTaskTodoRequest,
   ProjectOption,
+  TaskAttachmentRecord,
+  TaskCommentRecord,
   TaskLabelOption,
   TaskRecord,
   TaskTodoRecord,
@@ -27,7 +30,12 @@ export class TaskService {
 
   getTasks(
     userId?: number | string,
-    filters: { month?: number | string; year?: number | string; projectId?: number | string } = {},
+    filters: {
+      month?: number | string;
+      year?: number | string;
+      projectId?: number | string;
+      recentlyUpdatedDays?: number | string;
+    } = {},
   ) {
     let params = new HttpParams();
 
@@ -44,6 +52,14 @@ export class TaskService {
     }
 
     params = this.appendDateFilters(params, filters);
+
+    if (
+      filters.recentlyUpdatedDays !== undefined &&
+      filters.recentlyUpdatedDays !== null &&
+      String(filters.recentlyUpdatedDays).trim()
+    ) {
+      params = params.set('recently_updated_days', String(filters.recentlyUpdatedDays));
+    }
 
     return this.http
       .get<ApiCollectionResponse<TaskRecord>>(`${this.apiUrl}/task`, {
@@ -106,11 +122,90 @@ export class TaskService {
       .pipe(map((response) => this.normalizeItem(response)));
   }
 
-  getTaskTodos(filters: { month?: number | string; year?: number | string } = {}) {
+  updateTaskTodo(taskTodoId: number | string, payload: Partial<CreateTaskTodoRequest>) {
+    const id = normalizeApiId(taskTodoId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task todo id'));
+    }
+
+    return this.http
+      .patch<ApiItemResponse<TaskTodoRecord>>(`${this.apiUrl}/task-todos/${id}`, payload, {
+        headers: this.createAuthHeaders(),
+      })
+      .pipe(map((response) => this.normalizeItem(response)));
+  }
+
+  deleteTaskTodo(taskTodoId: number | string) {
+    const id = normalizeApiId(taskTodoId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task todo id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(`${this.apiUrl}/task-todos/${id}`, {
+      headers: this.createAuthHeaders(),
+    });
+  }
+
+  uploadTaskAttachments(taskId: number | string, files: File[]) {
+    const id = normalizeApiId(taskId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task id'));
+    }
+
+    const formData = new FormData();
+    formData.append('task_id', String(id));
+    files.forEach((file) => formData.append('files', file));
+
+    return this.http.post<
+      ApiCollectionResponse<TaskAttachmentRecord> | ApiItemResponse<TaskRecord>
+    >(`${this.apiUrl}/task-attachments`, formData, {
+      headers: this.createAuthHeaders(),
+    });
+  }
+
+  deleteTaskAttachment(attachmentId: number | string) {
+    const id = normalizeApiId(attachmentId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task attachment id'));
+    }
+
+    return this.http.delete<{ title?: string; message?: string }>(
+      `${this.apiUrl}/task-attachments/${id}`,
+      {
+        headers: this.createAuthHeaders(),
+      },
+    );
+  }
+
+  getTaskComments(taskId: number | string) {
+    const id = normalizeApiId(taskId);
+    if (id === null) {
+      return throwError(() => createInvalidApiIdError('task id'));
+    }
+
+    return this.http
+      .get<ApiCollectionResponse<TaskCommentRecord>>(`${this.apiUrl}/task-comments`, {
+        headers: this.createAuthHeaders(),
+        params: new HttpParams().set('task_id', String(id)),
+      })
+      .pipe(map((response) => this.normalizeCollection(response)));
+  }
+
+  createTaskComment(payload: CreateTaskCommentRequest) {
+    return this.http
+      .post<ApiItemResponse<TaskCommentRecord>>(`${this.apiUrl}/task-comments`, payload, {
+        headers: this.createAuthHeaders(),
+      })
+      .pipe(map((response) => this.normalizeItem(response)));
+  }
+
+  getTaskTodos(
+    filters: { month?: number | string; year?: number | string; projectId?: number | string } = {},
+  ) {
     return this.http
       .get<ApiCollectionResponse<TaskTodoRecord>>(`${this.apiUrl}/task-todos`, {
         headers: this.createAuthHeaders(),
-        params: this.appendDateFilters(new HttpParams(), filters),
+        params: this.appendReportFilters(new HttpParams(), filters),
       })
       .pipe(map((response) => this.normalizeCollection(response)));
   }
@@ -139,47 +234,58 @@ export class TaskService {
       .pipe(map((response) => this.normalizeCollection(response)));
   }
 
-  generateTaskReportPdf(filters: { month?: number | string; year?: number | string; type?: string }) {
-    let params = new HttpParams();
+  buildTaskReportPdfUrl(filters: {
+    month?: number | string;
+    year?: number | string;
+    type?: string;
+    project_id?: number | string;
+    user_id?: number | string;
+  }): string {
+    const searchParams = new URLSearchParams();
 
     if (filters.month !== undefined && filters.month !== null && String(filters.month).trim()) {
-      params = params.set('month', String(filters.month));
+      searchParams.set('month', String(filters.month));
     }
 
     if (filters.year !== undefined && filters.year !== null && String(filters.year).trim()) {
-      params = params.set('year', String(filters.year));
+      searchParams.set('year', String(filters.year));
     }
 
     if (filters.type) {
-      params = params.set('type', filters.type);
+      searchParams.set('type', filters.type);
     }
 
-    return this.http.get(`${this.apiUrl}/task/report/pdf`, {
-      headers: this.createAuthHeaders(),
-      observe: 'response',
-      params,
-      responseType: 'blob',
-    });
+    if (
+      filters.project_id !== undefined &&
+      filters.project_id !== null &&
+      String(filters.project_id).trim()
+    ) {
+      searchParams.set('project_id', String(filters.project_id));
+    }
+
+    if (
+      filters.user_id !== undefined &&
+      filters.user_id !== null &&
+      String(filters.user_id).trim()
+    ) {
+      searchParams.set('user_id', String(filters.user_id));
+    }
+
+    const query = searchParams.toString();
+    return `${this.apiUrl}/task/report/pdf${query ? `?${query}` : ''}`;
   }
 
-  getFilenameFromResponse(
-    response: HttpResponse<Blob>,
-    fallback = 'task-report.pdf',
-  ): string {
-    const contentDisposition = response.headers.get('content-disposition');
-    const filenameMatch =
-      contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i) ??
-      contentDisposition?.match(/filename="?([^"]+)"?/i);
-
-    if (!filenameMatch?.[1]) {
-      return fallback;
-    }
-
-    try {
-      return decodeURIComponent(filenameMatch[1]);
-    } catch {
-      return filenameMatch[1];
-    }
+  getTaskReportPdf(filters: {
+    month?: number | string;
+    year?: number | string;
+    type?: string;
+    project_id?: number | string;
+    user_id?: number | string;
+  }) {
+    return this.http.get(this.buildTaskReportPdfUrl(filters), {
+      headers: this.createAuthHeaders(),
+      responseType: 'blob',
+    });
   }
 
   private normalizeCollection<T>(response: ApiCollectionResponse<T>): T[] {
@@ -250,6 +356,23 @@ export class TaskService {
 
     if (filters.year !== undefined && filters.year !== null && String(filters.year).trim()) {
       params = params.set('year', String(filters.year));
+    }
+
+    return params;
+  }
+
+  private appendReportFilters(
+    params: HttpParams,
+    filters: { month?: number | string; year?: number | string; projectId?: number | string },
+  ): HttpParams {
+    params = this.appendDateFilters(params, filters);
+
+    if (
+      filters.projectId !== undefined &&
+      filters.projectId !== null &&
+      String(filters.projectId).trim()
+    ) {
+      params = params.set('project_id', String(filters.projectId));
     }
 
     return params;

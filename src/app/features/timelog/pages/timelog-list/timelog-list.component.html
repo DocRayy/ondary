@@ -1,4 +1,6 @@
-<section class="flex h-[calc(100dvh-116px)] min-h-[520px] min-w-0 flex-col overflow-hidden pr-0 lg:pr-8">
+<section
+  class="flex h-[calc(100dvh-116px)] min-h-[520px] min-w-0 flex-col overflow-hidden pr-0 lg:pr-8"
+>
   <div class="shrink-0 pb-5">
     <h2 class="text-sm font-bold text-white">Create New Timelog</h2>
 
@@ -26,7 +28,19 @@
       </button>
     </form>
 
-    <p *ngIf="errorMessage" class="mt-3 text-sm font-semibold text-red-600">{{ errorMessage }}</p>
+    <div
+      *ngIf="errorMessage"
+      class="mt-3 rounded-md bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
+    >
+      <p>{{ errorMessage }}</p>
+      <button
+        type="button"
+        class="mt-2 rounded-md bg-red-100 px-4 py-2 text-xs font-bold text-red-800"
+        (click)="reloadTimelogs()"
+      >
+        Reload
+      </button>
+    </div>
   </div>
 
   <div class="flex min-h-0 flex-1 flex-col">
@@ -39,13 +53,13 @@
       >
         <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
           <!-- Avatar -->
-          <div class="skeleton h-11 w-11 rounded-full"></div>
+          <div class="h-11 w-11 rounded-full bg-tertiary-200 animate-pulse"></div>
 
           <div class="min-w-0">
             <div class="flex items-start gap-4">
               <div class="min-w-0 max-w-[300px] sm:min-w-[220px]">
-                <div class="skeleton mb-2 h-3.5 w-[70%] rounded"></div>
-                <div class="skeleton h-3 w-[45%] rounded"></div>
+                <div class="mb-2 h-3.5 w-[70%] rounded bg-tertiary-300 animate-pulse"></div>
+                <div class="h-3 w-[45%] rounded bg-tertiary-200 animate-pulse"></div>
               </div>
               <div
                 class="mt-4 hidden flex-1 border-t border-dashed border-tertiary-700 md:block"
@@ -54,26 +68,29 @@
 
             <!-- Timeline grid -->
             <div class="mt-3 grid grid-cols-[56px_28px_minmax(0,1fr)] gap-1">
-              <div class="skeleton h-2.5 w-9 rounded"></div>
-              <div class="skeleton row-span-3 w-1 rounded-full" style="height: 80px"></div>
-              <div class="skeleton h-2.5 w-14 rounded"></div>
+              <div class="h-2.5 w-9 rounded bg-tertiary-300 animate-pulse"></div>
+              <div
+                class="row-span-3 w-1 rounded-full bg-tertiary-300 animate-pulse"
+                style="height: 80px"
+              ></div>
+              <div class="h-2.5 w-14 rounded bg-tertiary-300 animate-pulse"></div>
 
               <div></div>
-              <div class="skeleton my-2 h-[18px] w-10 rounded"></div>
+              <div class="my-2 h-[18px] w-10 rounded bg-tertiary-200 animate-pulse"></div>
 
-              <div class="skeleton h-2.5 w-9 rounded"></div>
-              <div class="skeleton h-2.5 w-14 rounded"></div>
+              <div class="h-2.5 w-9 rounded bg-tertiary-300 animate-pulse"></div>
+              <div class="h-2.5 w-14 rounded bg-tertiary-300 animate-pulse"></div>
             </div>
 
             <!-- Attachment slots -->
             <div class="mt-3 flex gap-2 sm:ml-[132px] sm:mt-[-38px]">
-              <div class="skeleton h-8 w-8 rounded-md"></div>
-              <div class="skeleton h-8 w-8 rounded-md"></div>
+              <div class="h-8 w-8 rounded-md bg-tertiary-200 animate-pulse"></div>
+              <div class="h-8 w-8 rounded-md bg-tertiary-200 animate-pulse"></div>
             </div>
           </div>
 
           <!-- Status badge -->
-          <div class="skeleton h-6 w-[72px] rounded-full"></div>
+          <div class="h-6 w-[72px] rounded-full bg-tertiary-200 animate-pulse"></div>
         </div>
       </article>
     </div>
@@ -95,14 +112,16 @@
       >
         <div class="grid gap-4 md:grid-cols-[44px_minmax(0,1fr)_auto]">
           <img
-            *ngIf="getTimelogFilePhoto; else headerAvatarFallback"
+            *ngIf="item.userPhoto; else headerAvatarFallback"
             [src]="item.userPhoto"
             alt="User photo"
             class="h-11 w-11 rounded-full border border-primary-200 object-cover"
           />
           <ng-template #headerAvatarFallback>
-            <span class="grid h-11 w-11 place-items-center rounded-full bg-tertiary-200 text-sm font-extrabold text-tertiary-950">
-              {{ item.displayName.charAt(0).toUpperCase() }}
+            <span
+              class="grid h-11 w-11 place-items-center rounded-full bg-tertiary-200 text-sm font-extrabold text-tertiary-950"
+            >
+              {{ item.userInitial }}
             </span>
           </ng-template>
 
@@ -133,7 +152,9 @@
                 type="button"
                 class="grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-tertiary-200 text-tertiary-950 transition hover:bg-tertiary-300"
                 [attr.aria-label]="'Attachment ' + (slot + 1)"
-                (click)="openImagePreview(getTimelogFilePhoto(file), file.note || 'Timelog attachment')"
+                (click)="
+                  openImagePreview(getTimelogFilePhoto(file), file.note || 'Timelog attachment')
+                "
               >
                 <img
                   *ngIf="getTimelogFilePhoto(file) as filePhoto; else attachmentPlaceholder"

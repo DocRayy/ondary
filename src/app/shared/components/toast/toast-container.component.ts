@@ -29,11 +29,7 @@ import { ToastMessage, ToastService } from './toast.service';
           [class.bg-green-50]="toast.type === 'success'"
           [class.bg-red-50]="toast.type === 'error'"
         >
-          <img
-            class="h-5 w-5"
-            [src]="getIcon(toast.type)"
-            [alt]="toast.type"
-          />
+          <img class="h-5 w-5" [src]="getIcon(toast.type)" [alt]="toast.type" />
         </span>
         <div class="min-w-0 flex-1 pt-0.5">
           <p
@@ -43,7 +39,7 @@ import { ToastMessage, ToastService } from './toast.service';
           >
             {{ toast.title }}
           </p>
-          <p class="mt-1 whitespace-pre-line break-words text-sm font-semibold text-neutral-800">
+          <p class="mt-1 whitespace-pre-line break-all text-sm font-semibold text-neutral-800">
             {{ toast.message }}
           </p>
         </div>

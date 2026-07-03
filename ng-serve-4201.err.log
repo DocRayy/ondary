@@ -1,0 +1,16 @@
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2345: Argument of type 'ActivityLogList' is not assignable to parameter of type 'ActivityLogRecord[]'.
+  Type 'ActivityLogList' is missing the following properties from type 'ActivityLogRecord[]': length, pop, push, concat, and 29 more.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/activity-log/pages/activity-log.component.ts:99:24:
+[37m      99 │           this.logs.set([32mlogs[37m);
+         ╵                         [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2345: Argument of type 'BackupList' is not assignable to parameter of type 'BackupRecord[]'.
+  Type 'BackupList' is missing the following properties from type 'BackupRecord[]': length, pop, push, concat, and 29 more.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/features/backup-restore/pages/backup-restore.component.ts:42:25:
+[37m      42 │         this.backups.set([32mbackups[37m);
+         ╵                          [32m~~~~~~~[0m
+
+[39m[22m

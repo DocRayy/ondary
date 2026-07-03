@@ -29,13 +29,23 @@ import {
 import { HomeService } from '../service/home.service';
 import { ManagerNotesComponent } from '../components/manager-notes/manager-notes.component';
 import { StickyNotesComponent } from '../components/sticky-notes/sticky-notes.component';
+import { TaskDialogComponent } from '../../task/components/task-dialog/task-dialog.component';
+import {
+  TaskRecord,
+  TaskStatus,
+  TaskTodoStatus,
+  getTaskUserIds,
+  parseTaskIdList,
+} from '../../task/schema/task.schema';
+import { TaskService } from '../../task/service/task.service';
+import { ActiveTimelogService } from '../../timelog/service/active-timelog.service';
+import { ToastService } from '../../../shared/components/toast/toast.service';
 
 Chart.register(...registerables);
 
 type ManagerChartRecord =
   | (HomeTaskRecord & { recordType: 'task' })
-  | (HomeTodoRecord & { recordType: 'todo' })
-  | (HomeTimelogRecord & { recordType: 'timelog' });
+  | (HomeTodoRecord & { recordType: 'todo' });
 
 type ManagerChartBucket = {
   labels: string[];
@@ -45,16 +55,32 @@ type ManagerChartBucket = {
   stepSize: number;
 };
 
+type HomeWorkItem = {
+  recordType: 'task' | 'todo';
+  task?: HomeTaskRecord;
+  todo?: HomeTodoRecord;
+};
+
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ManagerNotesComponent, StickyNotesComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    ManagerNotesComponent,
+    StickyNotesComponent,
+    TaskDialogComponent,
+  ],
   templateUrl: './home.component.html',
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly authService = inject(AuthService);
   private readonly permission = inject(RolePermissionService);
   private readonly homeService = inject(HomeService);
+  private readonly taskService = inject(TaskService);
+  readonly activeTimelogService = inject(ActiveTimelogService);
+  private readonly toastService = inject(ToastService);
   @ViewChild('managerTaskChart') private managerTaskChartRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('managerChartPanel') private managerChartPanelRef?: ElementRef<HTMLDivElement>;
 
@@ -70,23 +96,57 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly loadingSummary = signal(false);
   readonly activeTaskTab = signal<TaskTab>('ongoing');
   readonly userTasks = signal<HomeTaskRecord[]>([]);
+  readonly userTodos = signal<HomeTodoRecord[]>([]);
   readonly chartTasks = signal<HomeTaskRecord[]>([]);
   readonly chartTodos = signal<HomeTodoRecord[]>([]);
   readonly chartTimelogs = signal<HomeTimelogRecord[]>([]);
+  readonly isTaskDialogOpen = signal(false);
+  readonly selectedTaskDialogTask = signal<TaskRecord | null>(null);
+  readonly selectedTaskDialogStatus = signal<TaskStatus>('draft');
+  readonly selectedTaskTodoId = signal<number | string | null>(null);
+  readonly isLoadingTaskDetail = signal(false);
+  readonly creatingTimelogTodoId = signal<number | string | null>(null);
+  readonly summaryErrorMessage = signal('');
   readonly managerFilter = signal<'days' | 'weeks' | 'months'>('days');
   readonly managerDate = signal(new Date());
   readonly isManager = this.permission.isManager();
 
   readonly ongoingTasks = computed(() =>
-    this.userTasks().filter((task) => this.isOngoingTask(task.status)),
+    this.userTasks().filter((task) => this.isOngoingTask(this.getTaskStatus(task))),
   );
 
   readonly completedTasks = computed(() =>
-    this.userTasks().filter((task) => this.normalizeStatus(task.status) === 'completed'),
+    this.userTasks().filter((task) => this.isCompletedStatus(this.getTaskStatus(task), task.progress)),
   );
+
+  readonly ongoingTodos = computed(() =>
+    this.userTodos().filter((todo) => !this.isCompletedStatus(todo.status, todo.progress)),
+  );
+
+  readonly completedTodos = computed(() =>
+    this.userTodos().filter((todo) => this.isCompletedStatus(todo.status, todo.progress)),
+  );
+
+  readonly ongoingWorkItems = computed<HomeWorkItem[]>(() => [
+    ...this.ongoingTasks().map((task) => ({ recordType: 'task' as const, task })),
+    ...(this.isManager
+      ? []
+      : this.ongoingTodos().map((todo) => ({ recordType: 'todo' as const, todo }))),
+  ]);
+
+  readonly completedWorkItems = computed<HomeWorkItem[]>(() => [
+    ...this.completedTasks().map((task) => ({ recordType: 'task' as const, task })),
+    ...(this.isManager
+      ? []
+      : this.completedTodos().map((todo) => ({ recordType: 'todo' as const, todo }))),
+  ]);
 
   readonly visibleTasks = computed(() =>
     this.activeTaskTab() === 'ongoing' ? this.ongoingTasks() : this.completedTasks(),
+  );
+
+  readonly visibleWorkItems = computed(() =>
+    this.activeTaskTab() === 'ongoing' ? this.ongoingWorkItems() : this.completedWorkItems(),
   );
 
   readonly managerChartTasks = computed(() => {
@@ -94,7 +154,7 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     const selectedDate = this.managerDate();
 
     return this.userTasks().filter((task) => {
-      const date = this.parseDate(task.due_date || task.created_at);
+      const date = this.getManagerRecordDate({ ...task, recordType: 'task' });
       if (!date) {
         return false;
       }
@@ -117,15 +177,45 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   });
 
-  readonly managerOngoingCount = computed(
-    () => this.managerChartTasks().filter((task) => this.isOngoingTask(task.status)).length,
-  );
+  readonly managerChartTodos = computed(() => {
+    const filter = this.managerFilter();
+    const selectedDate = this.managerDate();
 
-  readonly managerCompletedCount = computed(
-    () =>
-      this.managerChartTasks().filter((task) => this.normalizeStatus(task.status) === 'completed')
-        .length,
-  );
+    return this.getOverviewTodos().filter((todo) => {
+      const date = this.getManagerRecordDate({ ...todo, recordType: 'todo' });
+      if (!date) {
+        return false;
+      }
+
+      if (filter === 'days') {
+        return this.isSameDate(date, selectedDate);
+      }
+
+      if (filter === 'weeks') {
+        return (
+          this.getWeekOfMonth(date) === this.getWeekOfMonth(selectedDate) &&
+          this.isSameMonth(date, selectedDate)
+        );
+      }
+
+      return (
+        date.getFullYear() === selectedDate.getFullYear() &&
+        date.getMonth() === selectedDate.getMonth()
+      );
+    });
+  });
+
+  readonly managerChartTotals = computed(() => {
+    const bucket = this.getManagerChartBucket();
+    return {
+      ongoing: this.sumChartCounts(bucket.ongoing),
+      completed: this.sumChartCounts(bucket.completed),
+    };
+  });
+
+  readonly managerOngoingCount = computed(() => this.managerChartTotals().ongoing);
+
+  readonly managerCompletedCount = computed(() => this.managerChartTotals().completed);
 
   readonly managerChartMax = computed(() =>
     Math.max(1, this.managerOngoingCount(), this.managerCompletedCount()),
@@ -194,12 +284,13 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
       timelogs: this.homeService.getCollection<HomeTimelogRecord>('/timelogs'),
     }).subscribe({
       next: ({ tasks, todos, timelogs }) => {
-        const currentUserTasks = this.filterByUserId(tasks, userId);
+        const currentUserTasks = this.filterTasksByUserId(tasks, userId);
         const visibleTasks = this.isManager ? tasks : currentUserTasks;
-        const visibleTodos = this.isManager ? todos : this.filterByUserId(todos, userId);
+        const visibleTodos = this.isManager ? todos : this.filterTodosByUserId(todos, userId);
         const visibleTimelogs = this.isManager ? timelogs : this.filterByUserId(timelogs, userId);
 
         this.userTasks.set(visibleTasks);
+        this.userTodos.set(visibleTodos);
         this.chartTasks.set(visibleTasks);
         this.chartTodos.set(visibleTodos);
         this.chartTimelogs.set(visibleTimelogs);
@@ -212,6 +303,8 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
         this.renderManagerChart();
       },
       error: () => {
+        this.userTasks.set([]);
+        this.userTodos.set([]);
         this.loadingSummary.set(false);
       },
     });
@@ -223,6 +316,190 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getTaskTitle(task: HomeTaskRecord): string {
     return task.title || task.task_title || task.name || `Task #${task.id ?? '-'}`;
+  }
+
+  getTodoLabel(todo: HomeTodoRecord): string {
+    return todo.label || `Task Todo #${todo.id ?? '-'}`;
+  }
+
+  getTodoTaskTitle(todo: HomeTodoRecord): string {
+    return todo.task ? this.getTaskTitle(todo.task) : `Task #${todo.task_id ?? '-'}`;
+  }
+
+  getTodoStatusLabel(todo: HomeTodoRecord): string {
+    const statusLabels: Record<TaskTodoStatus, string> = {
+      pending: 'Pending',
+      progress: 'Progress',
+      completed: 'Completed',
+      completed_but_overdue: 'Completed but Overdue',
+    };
+    const status = this.normalizeStatus(todo.status) as TaskTodoStatus;
+    return statusLabels[status] || todo.status || 'Pending';
+  }
+
+  getTodoAssigneeLabel(todo: HomeTodoRecord): string {
+    const assignees = this.getRecordUsers(todo);
+    return assignees.length
+      ? assignees.map((user) => user.name || user.username || user.email || `User #${user.id}`).join(', ')
+      : 'Unassigned';
+  }
+
+  getTodoEstimateLabel(todo: HomeTodoRecord): string {
+    if (todo.estimate_time_label) {
+      return todo.estimate_time_label;
+    }
+
+    const estimateHours = Number(todo.estimate_time_hours ?? todo.estimate_time);
+    return Number.isFinite(estimateHours) && estimateHours > 0 ? `${estimateHours}h` : '';
+  }
+
+  getTodoCreatedTime(todo: HomeTodoRecord): string {
+    return this.formatTime(todo.created_at);
+  }
+
+  getTodoUpdatedTime(todo: HomeTodoRecord): string {
+    return this.formatTime(todo.updated_at);
+  }
+
+  getTodoDuration(todo: HomeTodoRecord): string {
+    const createdDate = this.parseDate(todo.created_at);
+    const updatedDate = this.parseDate(todo.updated_at);
+
+    if (!createdDate || !updatedDate) {
+      return '-';
+    }
+
+    return this.formatMinutes(
+      Math.max(0, Math.round((updatedDate.getTime() - createdDate.getTime()) / 60000)),
+    );
+  }
+
+  canCreateTimelog(todo: HomeTodoRecord): boolean {
+    if (!todo.id || this.creatingTimelogTodoId() || this.activeTimelogService.isFinishedTaskTodo(todo.id)) {
+      return false;
+    }
+
+    if (!this.isCurrentUserTodoAssignee(todo)) {
+      return false;
+    }
+
+    return (
+      !this.activeTimelogService.hasActiveTimelog() ||
+      this.activeTimelogService.isActiveTaskTodo(todo.id)
+    );
+  }
+
+  isTodoActiveTimelog(todo: HomeTodoRecord): boolean {
+    return this.activeTimelogService.isActiveTaskTodo(todo.id);
+  }
+
+  isTodoPausedTimelog(todo: HomeTodoRecord): boolean {
+    return this.activeTimelogService.isPausedTaskTodo(todo.id);
+  }
+
+  isTodoFinishedTimelog(todo: HomeTodoRecord): boolean {
+    return this.activeTimelogService.isFinishedTaskTodo(todo.id);
+  }
+
+  createTimelogForTodo(todo: HomeTodoRecord, event?: Event): void {
+    event?.stopPropagation();
+    this.summaryErrorMessage.set('');
+
+    if (this.isTodoActiveTimelog(todo)) {
+      this.activeTimelogService.openEndDialog();
+      return;
+    }
+
+    if (!todo.id) {
+      this.summaryErrorMessage.set('Save task todo before creating timelog.');
+      return;
+    }
+
+    if (!this.isCurrentUserTodoAssignee(todo)) {
+      this.summaryErrorMessage.set('You can only create timelog for your assigned todo.');
+      return;
+    }
+
+    const pausedTimelog = this.activeTimelogService.getPausedTaskTodoTimelog(todo.id);
+    if (pausedTimelog) {
+      this.creatingTimelogTodoId.set(todo.id);
+      this.activeTimelogService.continueTimelog(pausedTimelog)?.subscribe({
+        next: (response) => {
+          this.creatingTimelogTodoId.set(null);
+          this.toastService.success(response);
+        },
+        error: (error) => {
+          this.creatingTimelogTodoId.set(null);
+          this.summaryErrorMessage.set(this.toastService.getErrorMessage(error, ''));
+          this.toastService.errorFrom(error);
+        },
+      });
+      return;
+    }
+
+    const userId = Number(this.currentUser()?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      this.summaryErrorMessage.set('User is required to create timelog.');
+      return;
+    }
+
+    this.creatingTimelogTodoId.set(todo.id);
+    this.activeTimelogService
+      .createTimelog({
+        user_id: userId,
+        task_todo_id: Number(todo.id),
+        name: this.getTodoLabel(todo),
+        start: new Date().toISOString(),
+      })
+      .subscribe({
+        next: (response) => {
+          this.creatingTimelogTodoId.set(null);
+          this.toastService.success(response);
+        },
+        error: (error) => {
+          this.creatingTimelogTodoId.set(null);
+          this.summaryErrorMessage.set(this.toastService.getErrorMessage(error, ''));
+          this.toastService.errorFrom(error);
+        },
+      });
+  }
+
+  openTaskFromHome(task: HomeTaskRecord): void {
+    if (!task.id) {
+      return;
+    }
+
+    this.selectedTaskTodoId.set(null);
+    this.openTaskDialogById(task.id);
+  }
+
+  openTodoTaskDialog(todo: HomeTodoRecord): void {
+    const taskId = todo.task_id ?? todo.task?.id;
+    if (!taskId) {
+      return;
+    }
+
+    this.selectedTaskTodoId.set(todo.id ?? null);
+    this.openTaskDialogById(taskId);
+  }
+
+  onTaskDialogVisibleChange(visible: boolean): void {
+    this.isTaskDialogOpen.set(visible);
+    if (!visible) {
+      this.selectedTaskDialogTask.set(null);
+      this.selectedTaskTodoId.set(null);
+    }
+  }
+
+  onTaskUpdated(task: TaskRecord): void {
+    this.selectedTaskDialogTask.set(task);
+    this.loadUserSummary();
+  }
+
+  onTaskDeleted(): void {
+    this.isTaskDialogOpen.set(false);
+    this.selectedTaskDialogTask.set(null);
+    this.loadUserSummary();
   }
 
   setManagerFilter(filter: 'days' | 'weeks' | 'months'): void {
@@ -266,14 +543,58 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     );
   }
 
-  private countByUserId(records: UserRelatedRecord[], userId: number): number {
-    return this.filterByUserId(records, userId).length;
+  private filterByUserId<T extends UserRelatedRecord>(records: T[], userId: number): T[] {
+    return records.filter((record) => this.recordHasUserId(record, userId));
   }
 
-  private filterByUserId<T extends UserRelatedRecord>(records: T[], userId: number): T[] {
-    return records.filter(
-      (record) => Number(record.user_id ?? record.user?.id) === Number(userId),
-    );
+  private filterTasksByUserId(tasks: HomeTaskRecord[], userId: number): HomeTaskRecord[] {
+    return tasks.filter((task) => {
+      if (this.recordHasUserId(task, userId)) {
+        return true;
+      }
+
+      return getTaskUserIds(task as TaskRecord).includes(Number(userId));
+    });
+  }
+
+  private filterTodosByUserId(todos: HomeTodoRecord[], userId: number): HomeTodoRecord[] {
+    return todos.filter((todo) => this.recordHasUserId(todo, userId));
+  }
+
+  private recordHasUserId(record: UserRelatedRecord, userId: number | string): boolean {
+    const targetUserId = Number(userId);
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+      return false;
+    }
+
+    const userIds = new Set<number>();
+    const legacyUserId = Number(record.user_id ?? record.user?.id);
+    if (Number.isInteger(legacyUserId) && legacyUserId > 0) {
+      userIds.add(legacyUserId);
+    }
+
+    this.getRecordUsers(record).forEach((user) => {
+      const id = Number(user.id);
+      if (Number.isInteger(id) && id > 0) {
+        userIds.add(id);
+      }
+    });
+
+    parseTaskIdList(record.user_ids).forEach((id) => userIds.add(id));
+
+    return userIds.has(targetUserId);
+  }
+
+  private getRecordUsers(record: UserRelatedRecord) {
+    if (Array.isArray(record.users)) {
+      return record.users.filter(Boolean);
+    }
+
+    return record.user ? [record.user] : [];
+  }
+
+  private getTaskStatus(task: HomeTaskRecord): string | undefined {
+    return task.board_column || task.status;
   }
 
   private isOngoingTask(status: string | undefined): boolean {
@@ -325,9 +646,42 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     const normalizedStatus = this.normalizeStatus(status);
     const numericProgress = Number(progress ?? 0);
     return (
-      ['completed', 'finish', 'finished', 'done'].includes(normalizedStatus) ||
+      ['completed', 'complete', 'finish', 'finished', 'done', 'completed_but_overdue'].includes(
+        normalizedStatus,
+      ) ||
       (Number.isFinite(numericProgress) && numericProgress >= 100)
     );
+  }
+
+  private isCurrentUserTodoAssignee(todo: HomeTodoRecord): boolean {
+    const currentUserId = Number(this.currentUser()?.id);
+    return Number.isInteger(currentUserId) && this.recordHasUserId(todo, currentUserId);
+  }
+
+  private openTaskDialogById(taskId: number | string): void {
+    this.summaryErrorMessage.set('');
+    this.isTaskDialogOpen.set(true);
+    this.isLoadingTaskDetail.set(true);
+    this.taskService.getTask(taskId).subscribe({
+      next: (task) => {
+        this.selectedTaskDialogTask.set(task);
+        this.selectedTaskDialogStatus.set(this.normalizeTaskStatus(task.board_column || task.status));
+        this.isLoadingTaskDetail.set(false);
+      },
+      error: (error) => {
+        this.isLoadingTaskDetail.set(false);
+        this.isTaskDialogOpen.set(false);
+        this.summaryErrorMessage.set(this.toastService.getErrorMessage(error, ''));
+        this.toastService.errorFrom(error);
+      },
+    });
+  }
+
+  private normalizeTaskStatus(status: string | undefined): TaskStatus {
+    const normalized = this.normalizeStatus(status) as TaskStatus;
+    return ['draft', 'progress', 'on_hold', 'completed'].includes(normalized)
+      ? normalized
+      : 'draft';
   }
 
   private renderManagerChart(): void {
@@ -515,13 +869,12 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      const progress = record.recordType === 'timelog' ? undefined : record.progress;
-      if (this.isCompletedStatus(record.status, progress)) {
+      if (this.isCompletedStatus(record.status, record.progress)) {
         completed[index] += 1;
         return;
       }
 
-      if (this.isOngoingTask(record.status)) {
+      if (record.recordType === 'todo' || this.isOngoingTask(record.status)) {
         ongoing[index] += 1;
       }
     });
@@ -529,11 +882,14 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     return { labels, ongoing, completed, max, stepSize };
   }
 
+  private sumChartCounts(values: number[]): number {
+    return values.reduce((total, value) => total + value, 0);
+  }
+
   private getFilteredManagerChartRecords(): ManagerChartRecord[] {
     const records: ManagerChartRecord[] = [
-      ...this.chartTasks().map((record) => ({ ...record, recordType: 'task' as const })),
-      ...this.chartTodos().map((record) => ({ ...record, recordType: 'todo' as const })),
-      ...this.chartTimelogs().map((record) => ({ ...record, recordType: 'timelog' as const })),
+      ...this.managerChartTasks().map((record) => ({ ...record, recordType: 'task' as const })),
+      ...this.managerChartTodos().map((record) => ({ ...record, recordType: 'todo' as const })),
     ];
 
     return records.filter((record) => {
@@ -555,11 +911,55 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private getManagerRecordDate(record: ManagerChartRecord): Date | null {
-    if (record.recordType === 'timelog') {
-      return this.parseDate(record.start || record.end || record.created_at || record.updated_at);
+    if (this.isCompletedStatus(record.status, record.progress)) {
+      return this.parseDate(
+        record.completed_at ||
+          record.finish_date ||
+          (record.recordType === 'task' ? record.moved_at : undefined) ||
+          record.updated_at ||
+          record.due_date ||
+          record.created_at,
+      );
     }
 
     return this.parseDate(record.due_date || record.created_at || record.updated_at);
+  }
+
+  private getOverviewTodos(): HomeTodoRecord[] {
+    const todos = new Map<string, HomeTodoRecord>();
+    const addTodo = (todo: HomeTodoRecord) => {
+      const key = this.getTodoUniqueKey(todo);
+      if (!key) {
+        return;
+      }
+
+      const existing = todos.get(key);
+      todos.set(key, {
+        ...existing,
+        ...todo,
+        task: todo.task || existing?.task,
+      });
+    };
+
+    this.chartTodos().forEach((todo) => addTodo(todo));
+    this.chartTasks().forEach((task) => this.getTaskTodos(task).forEach((todo) => addTodo(todo)));
+
+    return Array.from(todos.values());
+  }
+
+  private getTaskTodos(task: HomeTaskRecord): HomeTodoRecord[] {
+    return task.task_todos || task.taskTodos || task.todos || [];
+  }
+
+  private getTodoUniqueKey(todo: HomeTodoRecord): string {
+    if (todo.id !== undefined && todo.id !== null && String(todo.id).trim()) {
+      return `id:${todo.id}`;
+    }
+
+    const taskId = todo.task_id ?? todo.task?.id ?? '';
+    const label = todo.label ?? '';
+    const createdAt = todo.created_at ?? '';
+    return taskId || label || createdAt ? `fallback:${taskId}:${label}:${createdAt}` : '';
   }
 
   private parseDate(value?: string | Date | null): Date | null {
@@ -598,6 +998,28 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private getWeekOfMonth(date: Date): number {
     return Math.ceil(date.getDate() / 7);
+  }
+
+  private formatTime(value?: string): string {
+    const date = this.parseDate(value);
+    if (!date) {
+      return '-';
+    }
+
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  private formatMinutes(minutes: number): string {
+    if (minutes < 60) {
+      return `${minutes} min`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
 
   private formatRelativeTime(date: Date): string {

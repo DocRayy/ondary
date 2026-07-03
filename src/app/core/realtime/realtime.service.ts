@@ -1,17 +1,24 @@
-import { Injectable, inject, isDevMode, signal } from '@angular/core';
+import { Injectable, NgZone, inject, isDevMode, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { io, Socket } from 'socket.io-client';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
 import type { NotificationItem } from '../notifications/notification.service';
-import { TaskRecord, TaskTodoRecord } from '../../features/task/schema/task.schema';
+import {
+  TaskCommentRecord,
+  TaskRecord,
+  TaskTodoRecord,
+} from '../../features/task/schema/task.schema';
 
 type RealtimeEventName =
   | 'task.created'
   | 'task.updated'
   | 'task.moved'
   | 'task.deleted'
+  | 'task.comment.created'
   | 'todo.updated'
+  | 'task_todo.overdue_warning'
+  | 'task_todo.overdue'
   | 'notification.created';
 
 export type RealtimeTaskPayload =
@@ -35,11 +42,39 @@ export type RealtimeTodoPayload =
       result?: TaskTodoRecord;
     };
 
+export type RealtimeTaskCommentPayload =
+  | TaskCommentRecord
+  | {
+      comment?: TaskCommentRecord;
+      task_comment?: TaskCommentRecord;
+      data?: TaskCommentRecord;
+      item?: TaskCommentRecord;
+      result?: TaskCommentRecord;
+    };
+
+export interface RealtimeTaskTodoOverduePayload {
+  title?: string;
+  message?: string;
+  timelog_id?: number | string;
+  user_id?: number | string;
+  task_todo_id?: number | string;
+  task_id?: number | string;
+  task_title?: string;
+  todo_label?: string;
+  estimate_time?: number;
+  estimate_time_minutes?: number;
+  estimate_time_label?: string;
+  elapsed_minutes?: number;
+  overdue_minutes?: number;
+  remaining_minutes?: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class RealtimeService {
   private readonly authService = inject(AuthService);
+  private readonly ngZone = inject(NgZone);
   private readonly apiUrl = environment.apiUrl;
   private readonly activeProjectIds = new Set<string>();
   private socket: Socket | null = null;
@@ -51,14 +86,20 @@ export class RealtimeService {
   private readonly taskUpdatedSubject = new Subject<RealtimeTaskPayload>();
   private readonly taskMovedSubject = new Subject<RealtimeTaskPayload>();
   private readonly taskDeletedSubject = new Subject<RealtimeTaskPayload>();
+  private readonly taskCommentCreatedSubject = new Subject<RealtimeTaskCommentPayload>();
   private readonly todoUpdatedSubject = new Subject<RealtimeTodoPayload>();
+  private readonly taskTodoOverdueWarningSubject = new Subject<RealtimeTaskTodoOverduePayload>();
+  private readonly taskTodoOverdueSubject = new Subject<RealtimeTaskTodoOverduePayload>();
   private readonly notificationCreatedSubject = new Subject<NotificationItem>();
 
   readonly taskCreated$ = this.taskCreatedSubject.asObservable();
   readonly taskUpdated$ = this.taskUpdatedSubject.asObservable();
   readonly taskMoved$ = this.taskMovedSubject.asObservable();
   readonly taskDeleted$ = this.taskDeletedSubject.asObservable();
+  readonly taskCommentCreated$ = this.taskCommentCreatedSubject.asObservable();
   readonly todoUpdated$ = this.todoUpdatedSubject.asObservable();
+  readonly taskTodoOverdueWarning$ = this.taskTodoOverdueWarningSubject.asObservable();
+  readonly taskTodoOverdue$ = this.taskTodoOverdueSubject.asObservable();
   readonly notificationCreated$ = this.notificationCreatedSubject.asObservable();
 
   constructor() {
@@ -96,30 +137,39 @@ export class RealtimeService {
 
     this.socket = io(this.apiUrl, {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],
     });
 
     this.socket.on('connect', () => {
-      this.connected.set(true);
-      this.debug('connect', { id: this.socket?.id });
-      this.rejoinRooms();
+      this.ngZone.run(() => {
+        this.connected.set(true);
+        this.debug('connect', { id: this.socket?.id });
+        this.rejoinRooms();
+      });
     });
 
     this.socket.on('disconnect', (reason) => {
-      this.connected.set(false);
-      this.debug('disconnect', { reason });
+      this.ngZone.run(() => {
+        this.connected.set(false);
+        this.debug('disconnect', { reason });
+      });
     });
 
     this.socket.on('connect_error', (error) => {
-      this.connected.set(false);
-      this.debug('connect_error', { message: error.message });
+      this.ngZone.run(() => {
+        this.connected.set(false);
+        this.debug('connect_error', { message: error.message });
+      });
     });
 
     this.on('task.created', this.taskCreatedSubject);
     this.on('task.updated', this.taskUpdatedSubject);
     this.on('task.moved', this.taskMovedSubject);
     this.on('task.deleted', this.taskDeletedSubject);
+    this.on('task.comment.created', this.taskCommentCreatedSubject);
     this.on('todo.updated', this.todoUpdatedSubject);
+    this.on('task_todo.overdue_warning', this.taskTodoOverdueWarningSubject);
+    this.on('task_todo.overdue', this.taskTodoOverdueSubject);
     this.on('notification.created', this.notificationCreatedSubject);
   }
 
@@ -164,8 +214,10 @@ export class RealtimeService {
 
   private on<T>(eventName: RealtimeEventName, subject: Subject<T>): void {
     this.socket?.on(eventName, (payload: T) => {
-      this.debug(eventName, payload);
-      subject.next(payload);
+      this.ngZone.run(() => {
+        this.debug(eventName, payload);
+        subject.next(payload);
+      });
     });
   }
 

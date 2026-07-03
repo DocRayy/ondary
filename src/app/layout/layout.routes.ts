@@ -5,7 +5,7 @@ export const LayoutRoutes: Routes = [
     path: '',
     loadComponent: () =>
       import('../features/home/pages/home.component').then((m) => m.HomeComponent),
-    data: { roles: ['member', 'admin', 'manager'] },
+    data: { roles: ['member', 'manager'] },
   },
   {
     path: 'task',
@@ -44,6 +44,27 @@ export const LayoutRoutes: Routes = [
         (m) => m.MemberAddComponent,
       ),
     data: { roles: ['admin', 'manager'] },
+  },
+  {
+    path: 'audit-log',
+    loadComponent: () =>
+      import('../features/audit-log/pages/audit-log.component').then(
+        (m) => m.AuditLogComponent,
+      ),
+    data: { roles: ['admin'] },
+  },
+  {
+    path: 'activity-log',
+    redirectTo: 'audit-log',
+    pathMatch: 'full',
+  },
+  {
+    path: 'backup-restore',
+    loadComponent: () =>
+      import('../features/backup-restore/pages/backup-restore.component').then(
+        (m) => m.BackupRestoreComponent,
+      ),
+    data: { roles: ['admin'] },
   },
   {
     path: 'dashboard',

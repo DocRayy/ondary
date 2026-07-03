@@ -2,11 +2,14 @@ import { CommonModule } from '@angular/common';
 import { HttpClient, HttpHeaders, HttpResponse } from '@angular/common/http';
 import {
   Component,
+  ElementRef,
   EventEmitter,
+  HostListener,
   Input,
   OnDestroy,
   OnInit,
   Output,
+  ViewChild,
   computed,
   inject,
   signal,
@@ -14,14 +17,18 @@ import {
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import dayjs from 'dayjs';
+import gsap from 'gsap';
 import { environment } from '../../../../environments/environment';
 import { AuthService, AuthUser } from '../../../core/auth/auth.service';
-import { NotificationItem, NotificationService } from '../../../core/notifications/notification.service';
+import {
+  NotificationItem,
+  NotificationService,
+} from '../../../core/notifications/notification.service';
 import { RealtimeService } from '../../../core/realtime/realtime.service';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
 import { ToastService } from '../../../shared/components/toast/toast.service';
 import { normalizeApiId } from '../../../shared/utils/api-id';
-import { getApiMediaUrl } from '../../../shared/utils/media';
+import { getFirstMediaUrl } from '../../../shared/utils/media';
 import 'dayjs/locale/en';
 
 type OndaryDesktopBridge = {
@@ -57,14 +64,17 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   readonly now = signal(new Date());
   readonly notificationsOpen = signal(false);
+  readonly notificationsPanelVisible = signal(false);
   readonly notifications = signal<NotificationItem[]>([]);
   readonly user = signal<AuthUser | null>(this.authService.getUser());
   readonly isDesktopInstalled = signal(Boolean(window.ondaryDesktop));
   readonly isInstallingDesktop = signal(false);
   readonly desktopInstallMessage = signal('');
+  readonly browserNotificationPermission = this.notificationService.browserPermission;
   readonly realtimeConnected = this.realtimeService.connected;
   private readonly nowDayjs = computed(() => dayjs(this.now()).locale('en'));
   private readonly desktopInstallerUrl = `${this.apiUrl}/downloads/ondary-installer.exe`;
+  @ViewChild('notificationsPanel') notificationsPanel?: ElementRef<HTMLElement>;
 
   readonly displayName = computed(() => {
     const user = this.user();
@@ -75,8 +85,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   readonly userPhoto = computed(() => {
     const user = this.user();
-    const photo = user?.photo_url || user?.photo || user?.avatar || user?.image;
-    return getApiMediaUrl(photo) || '';
+    return getFirstMediaUrl(user) || '';
   });
 
   readonly timeLabel = computed(() =>
@@ -114,11 +123,38 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   toggleNotifications(): void {
-    this.notificationsOpen.update((open) => !open);
+    if (this.notificationsOpen()) {
+      this.closeNotifications();
+      return;
+    }
+
+    this.notificationsPanelVisible.set(true);
+    this.notificationsOpen.set(true);
+    window.setTimeout(() => this.animateNotificationsIn());
   }
 
   closeNotifications(): void {
+    if (!this.notificationsOpen()) {
+      return;
+    }
+
     this.notificationsOpen.set(false);
+    this.animateNotificationsOut();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (
+      target?.closest('[data-notifications-trigger]') ||
+      target?.closest('[data-notifications-panel]')
+    ) {
+      return;
+    }
+
+    if (this.notificationsOpen()) {
+      this.closeNotifications();
+    }
   }
 
   toggleSidebar(): void {
@@ -136,6 +172,51 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
     void this.router.navigate(commands.path, {
       queryParams: commands.queryParams,
+    });
+  }
+
+  enableBrowserNotifications(): void {
+    void this.notificationService.enableBrowserNotifications().then((permission) => {
+      if (permission === 'granted') {
+        this.toastService.success({
+          title: 'Notification',
+          message: 'Desktop alert aktif.',
+        });
+        return;
+      }
+
+      this.toastService.error({
+        title: 'Notification',
+        message:
+          permission === 'denied'
+            ? 'Desktop alert diblokir browser. Aktifkan dari site settings.'
+            : 'Desktop alert belum bisa diaktifkan.',
+      });
+    });
+  }
+
+  testDesktopNotification(): void {
+    void this.notificationService.showTestDesktopNotification().then((result) => {
+      if (result === 'browser-shown' || result === 'electron-shown') {
+        this.toastService.success({
+          title: 'Notification',
+          message:
+            result === 'browser-shown'
+              ? 'Browser sudah memanggil desktop alert.'
+              : 'Desktop app sudah memanggil desktop alert.',
+        });
+        return;
+      }
+
+      this.toastService.error({
+        title: 'Notification',
+        message:
+          result === 'permission-denied'
+            ? 'Permission browser belum granted.'
+            : result === 'unsupported'
+              ? 'Browser tidak mendukung desktop notification.'
+              : 'Desktop alert gagal dipanggil.',
+      });
     });
   }
 
@@ -162,7 +243,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
     window.setTimeout(() => {
       this.isInstallingDesktop.set(false);
-      this.desktopInstallMessage.set('Jika download tidak mulai, pastikan installer tersedia di server.');
+      this.desktopInstallMessage.set(
+        'Jika download tidak mulai, pastikan installer tersedia di server.',
+      );
     }, 1000);
   }
 
@@ -204,16 +287,45 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   private loadNotifications(): void {
-    this.notificationService
-      .getMine()
-      .subscribe({
-        next: (response) => {
-          this.notifications.set(response.map((item) => this.toViewNotification(item)));
-        },
-        error: () => {
-          this.notifications.set([]);
-        },
-      });
+    this.notificationService.getMine().subscribe({
+      next: (response) => {
+        this.notifications.set(response.map((item) => this.toViewNotification(item)));
+      },
+      error: () => {
+        this.notifications.set([]);
+      },
+    });
+  }
+
+  private animateNotificationsIn(): void {
+    const panel = this.notificationsPanel?.nativeElement;
+    if (!panel) {
+      return;
+    }
+
+    gsap.killTweensOf(panel);
+    gsap.fromTo(
+      panel,
+      { autoAlpha: 0, y: 10 },
+      { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out' },
+    );
+  }
+
+  private animateNotificationsOut(): void {
+    const panel = this.notificationsPanel?.nativeElement;
+    if (!panel) {
+      this.notificationsPanelVisible.set(false);
+      return;
+    }
+
+    gsap.killTweensOf(panel);
+    gsap.to(panel, {
+      autoAlpha: 0,
+      y: 10,
+      duration: 0.18,
+      ease: 'power2.inOut',
+      onComplete: () => this.notificationsPanelVisible.set(false),
+    });
   }
 
   private normalizeUserResponse(response: UserResponse): AuthUser | null {
@@ -309,7 +421,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
       case 'task_todo_created':
         return {
           title: item.title || 'Todo baru',
-          message: item.message || `Todo #${item.task_todo_id ?? '-'} ditambahkan ke task #${item.task_id ?? '-'}.`,
+          message:
+            item.message ||
+            `Todo #${item.task_todo_id ?? '-'} ditambahkan ke task #${item.task_id ?? '-'}.`,
         };
       case 'manager_note_created':
         return {
@@ -347,9 +461,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
     });
   }
 
-  private getNotificationRoute(item: NotificationItem):
-    | { path: unknown[]; queryParams: Record<string, string | number> }
-    | null {
+  private getNotificationRoute(
+    item: NotificationItem,
+  ): { path: unknown[]; queryParams: Record<string, string | number> } | null {
     if (item.type === 'manager_note_created' && item.manager_note_id) {
       return {
         path: ['/'],

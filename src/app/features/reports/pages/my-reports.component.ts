@@ -1,10 +1,23 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { RolePermissionService } from '../../../core/auth/role-permission.service';
+import {
+  DropdownSelectComponent,
+  DropdownSelectOption,
+  DropdownSelectValue,
+} from '../../../shared/components/dropdown-select/dropdown-select.component';
 import { FcIconComponent } from '../../../shared/components/fc-icon/fc-icon.component';
-import { ProjectOption, TaskRecord, TaskTodoRecord } from '../../task/schema/task.schema';
+import { ToastService } from '../../../shared/components/toast/toast.service';
+import { getFirstMediaUrl } from '../../../shared/utils/media';
+import {
+  ProjectOption,
+  TaskRecord,
+  TaskTodoRecord,
+  UserOption,
+} from '../../task/schema/task.schema';
 import { TaskService } from '../../task/service/task.service';
 import { TimelogRecord } from '../../timelog/schema/timelog.schema';
 import { TimelogService } from '../../timelog/service/timelog.service';
@@ -25,7 +38,7 @@ interface ReportRow {
 @Component({
   selector: 'app-my-reports',
   standalone: true,
-  imports: [CommonModule, FcIconComponent],
+  imports: [CommonModule, FcIconComponent, DropdownSelectComponent],
   templateUrl: './my-reports.component.html',
 })
 export class MyReportsComponent implements OnInit {
@@ -33,14 +46,24 @@ export class MyReportsComponent implements OnInit {
   private readonly permission = inject(RolePermissionService);
   private readonly taskService = inject(TaskService);
   private readonly timelogService = inject(TimelogService);
+  private readonly toastService = inject(ToastService);
   private readonly currentYear = new Date().getFullYear();
+  private readonly currentMonth = new Date().getMonth() + 1;
 
-  readonly selectedMonth = signal(new Date(this.currentYear, new Date().getMonth(), 1));
-  readonly selectedYear = signal(this.currentYear);
-  readonly yearOptions = Array.from(
-    { length: this.currentYear - 2020 + 1 },
-    (_, index) => 2020 + index,
-  );
+  readonly selectedMonth = signal<number | null>(this.currentMonth);
+  readonly selectedYear = signal<number | null>(this.currentYear);
+  readonly selectedType = signal('');
+  readonly selectedProjectId = signal<number | null>(null);
+  readonly monthOptions = Array.from({ length: 12 }, (_, index) => ({
+    value: index + 1,
+    label: new Intl.DateTimeFormat('en-US', { month: 'long' }).format(
+      new Date(this.currentYear, index, 1),
+    ),
+  }));
+  readonly yearOptions = signal<number[]>([this.currentYear]);
+  readonly isManager = this.permission.isManager() || this.permission.isAdmin();
+  readonly users = signal<UserOption[]>([]);
+  readonly isLoadingUsers = signal(false);
   readonly tasks = signal<TaskRecord[]>([]);
   readonly taskTodos = signal<TaskTodoRecord[]>([]);
   readonly timelogs = signal<TimelogRecord[]>([]);
@@ -49,13 +72,7 @@ export class MyReportsComponent implements OnInit {
   readonly isLoading = signal(false);
   readonly isGeneratingPdf = signal(false);
   readonly errorMessage = signal('');
-  readonly selectedUserId = signal<number | null>(
-    this.permission.isManager() ? null : this.currentUserId(),
-  );
-
-  readonly monthLabel = computed(() =>
-    new Intl.DateTimeFormat('en-US', { month: 'long' }).format(this.selectedMonth()),
-  );
+  readonly selectedUserId = signal<number | null>(this.isManager ? null : this.currentUserId());
 
   readonly totalMinutes = computed(() =>
     this.reportRows().reduce((sum, row) => sum + row.timeSpendMinutes, 0),
@@ -70,98 +87,179 @@ export class MyReportsComponent implements OnInit {
     );
     return ids.size;
   });
-  readonly totalCompleted = computed(
-    () =>
-      this.reportRows().reduce(
-        (sum, row) => sum + (row.completed || this.isCompletedStatus(row.status) ? 1 : 0),
-        0,
-      ),
+  readonly totalCompleted = computed(() =>
+    this.reportRows().reduce(
+      (sum, row) => sum + (row.completed || this.isCompletedStatus(row.status) ? 1 : 0),
+      0,
+    ),
   );
 
   ngOnInit(): void {
+    if (this.isManager) {
+      this.loadUsers();
+    }
+
     this.loadReportData();
+    this.loadAvailableYears();
   }
 
   previousMonth(): void {
     const month = this.selectedMonth();
-    const nextMonth = new Date(this.selectedYear(), month.getMonth() - 1, 1);
-    this.selectedMonth.set(nextMonth);
-    this.selectedYear.set(nextMonth.getFullYear());
+    if (!month) {
+      return;
+    }
+
+    if (month === 1) {
+      this.selectedMonth.set(12);
+      if (this.selectedYear() !== null) {
+        this.selectedYear.update((year) => (year ?? this.currentYear) - 1);
+      }
+    } else {
+      this.selectedMonth.set(month - 1);
+    }
+
     this.loadReportData();
   }
 
   nextMonth(): void {
     const month = this.selectedMonth();
-    const nextMonth = new Date(this.selectedYear(), month.getMonth() + 1, 1);
-    this.selectedMonth.set(nextMonth);
-    this.selectedYear.set(nextMonth.getFullYear());
-    this.loadReportData();
-  }
-
-  changeYear(event: Event): void {
-    const year = Number((event.target as HTMLSelectElement).value);
-    if (!Number.isInteger(year)) {
+    if (!month) {
       return;
     }
 
-    this.selectedYear.set(year);
-    this.selectedMonth.set(new Date(year, this.selectedMonth().getMonth(), 1));
+    if (month === 12) {
+      this.selectedMonth.set(1);
+      if (this.selectedYear() !== null) {
+        this.selectedYear.update((year) => (year ?? this.currentYear) + 1);
+      }
+    } else {
+      this.selectedMonth.set(month + 1);
+    }
+
     this.loadReportData();
+  }
+
+  selectMonth(value: DropdownSelectValue): void {
+    this.selectedMonth.set(this.normalizeNullableNumber(value));
+    this.loadReportData();
+  }
+
+  selectYear(value: DropdownSelectValue): void {
+    this.selectedYear.set(this.normalizeNullableNumber(value));
+    this.loadReportData();
+  }
+
+  selectUser(value: DropdownSelectValue): void {
+    this.selectedUserId.set(this.normalizeNullableNumber(value));
+    this.loadAvailableYears();
+    this.loadReportData();
+  }
+
+  selectProject(value: DropdownSelectValue): void {
+    this.selectedProjectId.set(this.normalizeNullableNumber(value));
+    this.loadAvailableYears();
+    this.loadReportData();
+  }
+
+  selectType(value: DropdownSelectValue): void {
+    this.selectedType.set(String(value ?? ''));
+    this.reportRows.set(this.buildRows());
   }
 
   generatePdf(): void {
-    if (this.isGeneratingPdf()) {
+    const token = this.authService.getToken();
+    if (!token) {
+      this.handlePdfUnauthorized();
       return;
     }
 
-    const selectedMonth = this.selectedMonth();
-    const month = selectedMonth.getMonth() + 1;
-    const year = this.selectedYear();
-
-    this.isGeneratingPdf.set(true);
+    const filters = this.getSelectedReportFilters();
+    const userId = this.getPdfUserId();
     this.errorMessage.set('');
+    this.isGeneratingPdf.set(true);
 
-    this.taskService.generateTaskReportPdf({ month, year }).subscribe({
-      next: (response) => {
-        const blob = response.body;
+    this.taskService
+      .getTaskReportPdf({
+        month: filters.month,
+        year: filters.year,
+        project_id: filters.projectId,
+        type: this.selectedType() || undefined,
+        user_id: userId ?? undefined,
+      })
+      .subscribe({
+        next: (blob) => {
+          this.isGeneratingPdf.set(false);
+          const pdfUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = pdfUrl;
+          link.download = this.getPdfFileName();
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+        },
+        error: (error) => {
+          this.isGeneratingPdf.set(false);
 
-        if (!blob) {
+          if (this.isUnauthorizedError(error)) {
+            this.handlePdfUnauthorized();
+            return;
+          }
+
           this.errorMessage.set('Failed to generate PDF.');
-          return;
-        }
-
-        this.downloadBlob(
-          blob,
-          this.taskService.getFilenameFromResponse(
-            response,
-            `task-report-${year}-${String(month).padStart(2, '0')}.pdf`,
-          ),
-        );
-      },
-      error: () => {
-        this.errorMessage.set('Failed to generate PDF.');
-        this.isGeneratingPdf.set(false);
-      },
-      complete: () => {
-        this.isGeneratingPdf.set(false);
-      },
-    });
+          this.toastService.error({ title: 'Error', message: 'Failed to generate PDF.' });
+        },
+      });
   }
 
   trackRowById(index: number, row: ReportRow): string {
-    return `${row.groupWeek}-${row.groupDay}-${row.assignee}-${row.todo}-${index}`;
+    return `${this.getGroupKey(row)}-${row.assignee}-${row.todo}-${index}`;
   }
 
   shouldShowGroupSeparator(index: number, row: ReportRow): boolean {
     const previousRow = this.reportRows()[index - 1];
-    return !previousRow || this.getGroupKey(previousRow) !== this.getGroupKey(row);
+    return !previousRow || this.getWeekGroupKey(previousRow) !== this.getWeekGroupKey(row);
+  }
+
+  shouldShowMonthSeparator(index: number, row: ReportRow): boolean {
+    if (this.selectedMonth() !== null) {
+      return false;
+    }
+
+    const previousRow = this.reportRows()[index - 1];
+    return !previousRow || this.getMonthGroupKey(previousRow) !== this.getMonthGroupKey(row);
   }
 
   getGroupLabel(row: ReportRow): string {
-    const groupWeek = row.groupWeek === undefined || row.groupWeek === null || row.groupWeek === ''
-      ? 1
-      : row.groupWeek;
-    return `Week ${groupWeek} - ${row.groupDay || 'Unknown date'}`;
+    return this.getWeekGroupLabel(row);
+  }
+
+  getMonthGroupLabel(row: ReportRow): string {
+    const date = this.parseDate(row.createdAt);
+    if (!date) {
+      return 'Unknown date';
+    }
+
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'long',
+      year: 'numeric',
+    }).format(date);
+  }
+
+  getWeekGroupLabel(row: ReportRow): string {
+    const date = this.parseDate(row.createdAt);
+    if (!date) {
+      return 'Unknown date';
+    }
+
+    const groupWeek =
+      row.groupWeek === undefined || row.groupWeek === null || row.groupWeek === ''
+        ? 1
+        : row.groupWeek;
+    const dayLabel = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: '2-digit',
+    }).format(date);
+    return `Week ${groupWeek} - ${dayLabel}`;
   }
 
   formatMinutes(minutes: number): string {
@@ -187,6 +285,117 @@ export class MyReportsComponent implements OnInit {
       hour: '2-digit',
       minute: '2-digit',
     }).format(date);
+  }
+
+  getSelectedUserLabel(): string {
+    const selectedUserId = this.selectedUserId();
+    if (selectedUserId === null) {
+      return 'All Users';
+    }
+
+    const user = this.users().find((item) => Number(item.id) === selectedUserId);
+    return this.getUserName(user, selectedUserId);
+  }
+
+  getSelectedUser(): UserOption | undefined {
+    const selectedUserId = this.selectedUserId();
+    return selectedUserId === null
+      ? undefined
+      : this.users().find((item) => Number(item.id) === selectedUserId);
+  }
+
+  getSelectedProjectLabel(): string {
+    const selectedProjectId = this.selectedProjectId();
+    if (selectedProjectId === null) {
+      return 'All Projects';
+    }
+
+    return this.getProjectLabelById(selectedProjectId) || `Project #${selectedProjectId}`;
+  }
+
+  getSelectedProject(): ProjectOption | undefined {
+    const selectedProjectId = this.selectedProjectId();
+    return selectedProjectId === null
+      ? undefined
+      : this.projects().find((item) => Number(item.id) === selectedProjectId);
+  }
+
+  getSelectedMonthLabel(): string {
+    const selectedMonth = this.selectedMonth();
+    return selectedMonth === null
+      ? 'All Months'
+      : this.monthOptions.find((month) => month.value === selectedMonth)?.label ||
+          `Month ${selectedMonth}`;
+  }
+
+  getSelectedYearLabel(): string {
+    return this.selectedYear() === null ? 'All Years' : String(this.selectedYear());
+  }
+
+  getSelectedTypeLabel(): string {
+    return this.selectedType() === 'completed' ? 'Completed' : 'All Types';
+  }
+
+  getUserPhoto(user: UserOption | undefined): string {
+    return getFirstMediaUrl(user) || '';
+  }
+
+  getProjectPhoto(project: ProjectOption | undefined): string {
+    return getFirstMediaUrl(project) || '';
+  }
+
+  getInitial(value: string | number | undefined): string {
+    return (
+      String(value ?? '?')
+        .trim()
+        .slice(0, 1)
+        .toUpperCase() || '?'
+    );
+  }
+
+  getUserOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Users', initial: 'A' },
+      ...this.users().map((user) => ({
+        value: user.id,
+        label: this.getUserName(user, user.id),
+        imageUrl: this.getUserPhoto(user),
+        initial: this.getInitial(this.getUserName(user, user.id)),
+      })),
+    ];
+  }
+
+  getProjectOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Projects', initial: 'A' },
+      ...this.projects().map((project) => ({
+        value: project.id,
+        label: project.label || project.name || `Project #${project.id}`,
+        imageUrl: this.getProjectPhoto(project),
+        initial: this.getInitial(project.label || project.name || project.id),
+      })),
+    ];
+  }
+
+  getMonthOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Months' },
+      ...this.monthOptions.map((month) => ({ value: month.value, label: month.label })),
+    ];
+  }
+
+  getYearOptions(): DropdownSelectOption[] {
+    return [
+      { value: null, label: 'All Years' },
+      ...this.yearOptions().map((year) => ({ value: year, label: String(year) })),
+    ];
+  }
+
+  getTypeOptions(): DropdownSelectOption[] {
+    return [
+      { value: '', label: 'All Types' },
+      { value: 'completed', label: 'Completed' },
+    ];
   }
 
   private loadReportData(): void {
@@ -216,27 +425,74 @@ export class MyReportsComponent implements OnInit {
     });
   }
 
+  private loadUsers(): void {
+    this.isLoadingUsers.set(true);
+
+    this.taskService.getUsers().subscribe({
+      next: (users) => {
+        this.users.set(users);
+        this.isLoadingUsers.set(false);
+      },
+      error: () => {
+        this.users.set([]);
+        this.isLoadingUsers.set(false);
+      },
+    });
+  }
+
+  private loadAvailableYears(): void {
+    const baseFilters =
+      this.selectedProjectId() !== null ? { projectId: this.selectedProjectId()! } : {};
+
+    forkJoin({
+      tasks: this.taskService.getTasks(this.selectedUserId() ?? undefined, baseFilters),
+      taskTodos: this.taskService.getTaskTodos(baseFilters),
+      timelogs: this.timelogService.getTimelogs(),
+    }).subscribe({
+      next: ({ tasks, taskTodos, timelogs }) => {
+        const years = new Set<number>([this.currentYear]);
+        const collectYear = (value?: string) => {
+          const year = this.parseDate(value)?.getFullYear();
+          if (year) {
+            years.add(year);
+          }
+        };
+
+        tasks.forEach((task) => collectYear(this.getReportDateValue(task)));
+        taskTodos.forEach((todo) => collectYear(this.getReportDateValue(todo)));
+        timelogs
+          .filter((timelog) => this.matchesSelectedUser(timelog.user_id))
+          .forEach((timelog) => collectYear(this.getReportDateValue(timelog)));
+
+        this.yearOptions.set(Array.from(years).sort((a, b) => b - a));
+      },
+      error: () => this.yearOptions.set([this.currentYear]),
+    });
+  }
+
   private buildRows(): ReportRow[] {
     const rows = new Map<string, ReportRow>();
 
-    this.getAllTodos().filter((todo) => this.shouldIncludeTodo(todo)).forEach((todo) => {
-      const task = todo.task || this.findTask(todo.task_id);
-      const key = String(todo.id ?? `${todo.task_id ?? 'task'}-${todo.label ?? 'todo'}`);
-      const createdAt = this.getReportDateValue(todo, task);
+    this.getAllTodos()
+      .filter((todo) => this.shouldIncludeTodo(todo))
+      .forEach((todo) => {
+        const task = todo.task || this.findTask(todo.task_id);
+        const key = String(todo.id ?? `${todo.task_id ?? 'task'}-${todo.label ?? 'todo'}`);
+        const createdAt = this.getReportDateValue(todo, task);
 
-      rows.set(key, {
-        assignee: this.getUserName(todo.user, todo.user_id ?? task?.user_id),
-        todo: todo.label || `Todo #${todo.id ?? '-'}`,
-        status: todo.status || 'pending',
-        created: 1,
-        completed: this.isTodoCompleted(todo) ? 1 : 0,
-        project: this.getTaskTodoProject(todo, task),
-        timeSpendMinutes: this.getReportNumberField(todo, 'timeSpendMinutes'),
-        createdAt,
-        groupWeek: this.getReportGroupWeek(todo, createdAt),
-        groupDay: this.getReportGroupDay(todo, createdAt),
+        rows.set(key, {
+          assignee: this.getTodoAssigneeName(todo, task),
+          todo: todo.label || `Todo #${todo.id ?? '-'}`,
+          status: todo.status || 'pending',
+          created: 1,
+          completed: this.isTodoCompleted(todo) ? 1 : 0,
+          project: this.getTaskTodoProject(todo, task),
+          timeSpendMinutes: this.getReportNumberField(todo, 'timeSpendMinutes'),
+          createdAt,
+          groupWeek: this.getReportGroupWeek(todo, createdAt),
+          groupDay: this.getReportGroupDay(todo, createdAt),
+        });
       });
-    });
 
     this.filteredTimelogs().forEach((timelog) => {
       const taskTodo = timelog.task_todo;
@@ -258,9 +514,10 @@ export class MyReportsComponent implements OnInit {
           groupDay: this.getReportGroupDay(timelog, createdAt),
         } as ReportRow);
       const isTimelogCompleted = this.isCompletedStatus(timelog.status);
-      const nextStatus = isTimelogCompleted && !this.isCompletedStatus(current.status)
-        ? timelog.status || current.status
-        : current.status;
+      const nextStatus =
+        isTimelogCompleted && !this.isCompletedStatus(current.status)
+          ? timelog.status || current.status
+          : current.status;
 
       rows.set(key, {
         ...current,
@@ -290,7 +547,9 @@ export class MyReportsComponent implements OnInit {
     const todos = new Map<string, TaskTodoRecord>();
 
     const addTodo = (todo: TaskTodoRecord, task?: TaskRecord) => {
-      const key = String(todo.id ?? `${todo.task_id ?? task?.id ?? 'task'}-${todo.label ?? 'todo'}`);
+      const key = String(
+        todo.id ?? `${todo.task_id ?? task?.id ?? 'task'}-${todo.label ?? 'todo'}`,
+      );
       const taskId = todo.task_id ?? task?.id;
       const normalizedTaskId = Number(taskId);
       todos.set(key, {
@@ -312,44 +571,59 @@ export class MyReportsComponent implements OnInit {
   private shouldIncludeTodo(todo: TaskTodoRecord): boolean {
     const task = todo.task || this.findTask(todo.task_id);
     return (
-      this.isInSelectedMonth(this.getReportDateValue(todo, task)) &&
-      this.matchesSelectedUser(todo.user_id ?? task?.user_id)
+      this.isInSelectedPeriod(this.getReportDateValue(todo, task)) &&
+      this.matchesSelectedTodoUser(todo, task) &&
+      this.matchesSelectedProject(todo, task) &&
+      this.matchesSelectedType(todo.status)
     );
   }
 
   private filteredTimelogs(): TimelogRecord[] {
-    return this.timelogs().filter(
-      (timelog) =>
-        this.isInSelectedMonth(timelog.start || timelog.created_at) &&
-        this.matchesSelectedUser(timelog.user_id),
-    );
+    return this.timelogs().filter((timelog) => {
+      const taskTodo = timelog.task_todo;
+      const task = taskTodo?.task || this.findTask(taskTodo?.task_id);
+
+      return (
+        this.isInSelectedPeriod(timelog.start || timelog.created_at) &&
+        this.matchesSelectedUser(timelog.user_id) &&
+        this.matchesSelectedProject(taskTodo, task) &&
+        this.matchesSelectedType(taskTodo?.status || timelog.status)
+      );
+    });
   }
 
   private findTask(taskId: number | string | undefined): TaskRecord | undefined {
     return this.tasks().find((task) => Number(task.id) === Number(taskId));
   }
 
-  private getTaskTodoProject(
-    todo: unknown,
-    task: unknown,
-  ): string {
+  private getTaskTodoProject(todo: unknown, task: unknown): string {
     return (
       this.getProjectLabel(this.getReportField(todo, 'project')) ||
       this.getReportStringField(todo, 'project') ||
       this.getProjectLabelFromTask(this.getReportField(todo, 'task')) ||
       this.getProjectLabelFromTask(task) ||
       this.getProjectLabelById(this.getReportField(todo, 'project_id')) ||
-      this.getProjectLabelById(this.getReportField(this.getReportField(todo, 'task'), 'project_id')) ||
+      this.getProjectLabelById(
+        this.getReportField(this.getReportField(todo, 'task'), 'project_id'),
+      ) ||
       this.getProjectLabelById(this.getReportField(task, 'project_id')) ||
       '-'
     );
   }
 
-  private getUserName(
+  getUserName(
     user: { username?: string; name?: string; email?: string } | null | undefined,
     userId?: number | string,
   ): string {
     return user?.name || user?.username || user?.email || `User #${userId ?? '-'}`;
+  }
+
+  private getTodoAssigneeName(todo: TaskTodoRecord, task?: TaskRecord): string {
+    if (todo.users?.length) {
+      return todo.users.map((user) => this.getUserName(user, user.id)).join(', ');
+    }
+
+    return this.getUserName(todo.user, todo.user_id ?? task?.user_id);
   }
 
   private getReportGroupWeek(source: unknown, fallbackDate?: string): number | string {
@@ -443,12 +717,17 @@ export class MyReportsComponent implements OnInit {
     }).format(date);
   }
 
-  private isInSelectedMonth(value?: string): boolean {
+  private isInSelectedPeriod(value?: string): boolean {
     const date = this.parseDate(value);
-    const month = this.selectedMonth();
-    return Boolean(
-      date && date.getFullYear() === this.selectedYear() && date.getMonth() === month.getMonth(),
-    );
+    if (!date) {
+      return false;
+    }
+
+    const selectedMonth = this.selectedMonth();
+    const selectedYear = this.selectedYear();
+    const matchesMonth = selectedMonth === null || date.getMonth() + 1 === selectedMonth;
+    const matchesYear = selectedYear === null || date.getFullYear() === selectedYear;
+    return matchesMonth && matchesYear;
   }
 
   private calculateMinuteDiff(start?: string, end?: string): number {
@@ -461,8 +740,42 @@ export class MyReportsComponent implements OnInit {
     return Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
   }
 
-  private getGroupKey(row: ReportRow): string {
-    return `${row.groupWeek}-${row.groupDay}`;
+  getGroupKey(row: ReportRow): string {
+    return this.getWeekGroupKey(row);
+  }
+
+  private getMonthGroupKey(row: ReportRow): string {
+    const date = this.parseDate(row.createdAt);
+    if (!date) {
+      return 'unknown';
+    }
+
+    return `month-${date.getFullYear()}-${date.getMonth() + 1}`;
+  }
+
+  private getWeekGroupKey(row: ReportRow): string {
+    const date = this.parseDate(row.createdAt);
+    if (!date) {
+      return 'unknown';
+    }
+
+    const groupWeek =
+      row.groupWeek === undefined || row.groupWeek === null || row.groupWeek === ''
+        ? 1
+        : row.groupWeek;
+    return `week-${date.getFullYear()}-${date.getMonth() + 1}-${groupWeek}`;
+  }
+
+  private getPdfFileName(): string {
+    const parts = ['task-report', this.getSelectedYearLabel(), this.getSelectedMonthLabel()]
+      .map((part) =>
+        part
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, ''),
+      )
+      .filter(Boolean);
+    return `${parts.join('-') || 'task-report'}.pdf`;
   }
 
   private isTodoCompleted(todo: TaskTodoRecord): boolean {
@@ -471,14 +784,33 @@ export class MyReportsComponent implements OnInit {
 
   private isCompletedStatus(status?: string): boolean {
     const normalizedStatus = String(status || '').toLowerCase();
-    return normalizedStatus === 'finish' || normalizedStatus === 'finished' || normalizedStatus === 'completed';
+    return (
+      normalizedStatus === 'finish' ||
+      normalizedStatus === 'finished' ||
+      normalizedStatus === 'completed' ||
+      normalizedStatus === 'completed_but_overdue'
+    );
   }
 
-  private getSelectedReportFilters(): { month: number; year: number } {
-    return {
-      month: this.selectedMonth().getMonth() + 1,
-      year: this.selectedYear(),
-    };
+  private getSelectedReportFilters(): { month?: number; year?: number; projectId?: number } {
+    const filters: { month?: number; year?: number; projectId?: number } = {};
+    const month = this.selectedMonth();
+    const year = this.selectedYear();
+    const projectId = this.selectedProjectId();
+
+    if (month !== null) {
+      filters.month = month;
+    }
+
+    if (year !== null) {
+      filters.year = year;
+    }
+
+    if (projectId !== null) {
+      filters.projectId = projectId;
+    }
+
+    return filters;
   }
 
   private parseDate(value?: string): Date | null {
@@ -500,18 +832,93 @@ export class MyReportsComponent implements OnInit {
     return selectedUserId === null || Number(userId) === Number(selectedUserId);
   }
 
-  private downloadBlob(blob: Blob, filename: string): void {
-    const fileUrl = URL.createObjectURL(blob);
-    const downloadLink = document.createElement('a');
+  private matchesSelectedTodoUser(todo: TaskTodoRecord, task?: TaskRecord): boolean {
+    const selectedUserId = this.selectedUserId();
+    if (selectedUserId === null) {
+      return true;
+    }
 
-    downloadLink.href = fileUrl;
-    downloadLink.target = '_blank';
-    downloadLink.rel = 'noopener';
-    downloadLink.download = filename;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
+    const userIds = new Set<number>();
+    [todo.user_id, todo.user?.id, task?.user_id].forEach((value) => {
+      const id = Number(value);
+      if (Number.isInteger(id) && id > 0) {
+        userIds.add(id);
+      }
+    });
 
-    window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000);
+    (todo.users || []).forEach((user) => {
+      const id = Number(user?.id);
+      if (Number.isInteger(id) && id > 0) {
+        userIds.add(id);
+      }
+    });
+
+    if (Array.isArray(todo.user_ids)) {
+      todo.user_ids.forEach((value) => {
+        const id = Number(value);
+        if (Number.isInteger(id) && id > 0) {
+          userIds.add(id);
+        }
+      });
+    }
+
+    return userIds.has(selectedUserId);
+  }
+
+  private matchesSelectedProject(...sources: unknown[]): boolean {
+    const selectedProjectId = this.selectedProjectId();
+    if (selectedProjectId === null) {
+      return true;
+    }
+
+    return sources.some((source) => {
+      const projectId =
+        this.getReportField(source, 'project_id') ??
+        this.getReportField(this.getReportField(source, 'project'), 'id') ??
+        this.getReportField(this.getReportField(source, 'task'), 'project_id') ??
+        this.getReportField(
+          this.getReportField(this.getReportField(source, 'task'), 'project'),
+          'id',
+        );
+
+      return Number(projectId) === selectedProjectId;
+    });
+  }
+
+  private matchesSelectedType(status?: string): boolean {
+    const selectedType = this.selectedType();
+    return !selectedType || this.normalizeStatus(status) === selectedType;
+  }
+
+  private getPdfUserId(): number | null {
+    return this.isManager ? this.selectedUserId() : null;
+  }
+
+  private isUnauthorizedError(error: unknown): boolean {
+    return error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403);
+  }
+
+  private handlePdfUnauthorized(): void {
+    this.errorMessage.set('Session expired. Please login again.');
+    this.toastService.error({ title: 'Session expired', message: 'Please login again.' });
+    this.authService.logout();
+  }
+
+  private normalizeStatus(status?: string): string {
+    const normalizedStatus = String(status || '').toLowerCase();
+    return normalizedStatus === 'finish' ||
+      normalizedStatus === 'finished' ||
+      normalizedStatus === 'completed_but_overdue'
+      ? 'completed'
+      : normalizedStatus;
+  }
+
+  private normalizeNullableNumber(value: DropdownSelectValue): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const numberValue = Number(value);
+    return Number.isInteger(numberValue) ? numberValue : null;
   }
 }

@@ -37,8 +37,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/ondary-icon.ico",
-      "signAndEditExecutable": false
+      "icon": "build/ondary-icon.ico"
     },
     "nsis": {
       "installerIcon": "build/ondary-icon.ico",

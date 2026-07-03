@@ -1,5 +1,7 @@
-import { AfterViewInit, Directive, ElementRef, OnDestroy, inject } from '@angular/core';
+import { AfterViewInit, Directive, ElementRef, Input, OnDestroy, inject } from '@angular/core';
 import gsap from 'gsap';
+
+type GsapModalMode = 'modal' | 'drawer-right';
 
 @Directive({
   selector: '[appGsapModal]',
@@ -9,9 +11,19 @@ export class GsapModalDirective implements AfterViewInit, OnDestroy {
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private enterTween?: gsap.core.Timeline;
 
+  @Input() appGsapModal: GsapModalMode | '' = 'modal';
+
   ngAfterViewInit(): void {
     const element = this.elementRef.nativeElement;
     const panel = this.getPanel(element);
+
+    if (this.mode === 'drawer-right') {
+      this.enterTween = gsap
+        .timeline({ defaults: { ease: 'power3.out' } })
+        .fromTo(element, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.18 })
+        .fromTo(panel, { xPercent: 100 }, { xPercent: 0, duration: 0.34 }, '<');
+      return;
+    }
 
     this.enterTween = gsap
       .timeline({ defaults: { ease: 'power3.out' } })
@@ -39,6 +51,17 @@ export class GsapModalDirective implements AfterViewInit, OnDestroy {
     clone.style.margin = '0';
     document.body.appendChild(clone);
 
+    if (this.mode === 'drawer-right') {
+      gsap
+        .timeline({
+          defaults: { ease: 'power2.inOut' },
+          onComplete: () => clone.remove(),
+        })
+        .to(panel, { xPercent: 100, duration: 0.26 })
+        .to(clone, { autoAlpha: 0, duration: 0.2 }, '<');
+      return;
+    }
+
     gsap
       .timeline({
         defaults: { ease: 'power2.inOut' },
@@ -52,8 +75,12 @@ export class GsapModalDirective implements AfterViewInit, OnDestroy {
     return (
       root.querySelector<HTMLElement>('[role="dialog"]') ||
       root.querySelector<HTMLElement>('form') ||
-      root.firstElementChild as HTMLElement ||
+      (root.firstElementChild as HTMLElement) ||
       root
     );
+  }
+
+  private get mode(): GsapModalMode {
+    return this.appGsapModal || 'modal';
   }
 }

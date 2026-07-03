@@ -54,6 +54,10 @@ export interface TimelogRecord
     id?: number | string;
     label?: string;
     task_id?: number | string;
+    status?: string;
+    estimate_time?: number;
+    estimate_time_minutes?: number;
+    estimate_time_label?: string;
     task?: {
       id?: number | string;
       title?: string;

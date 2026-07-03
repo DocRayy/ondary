@@ -236,7 +236,11 @@ export class ImageCropperComponent implements AfterViewInit, OnChanges, OnDestro
     const imageTop = boxHeight / 2 + this.offsetY - this.displayHeight / 2;
     const sourceX = Math.max(0, -imageLeft / scale);
     const sourceY = Math.max(0, -imageTop / scale);
-    const sourceSize = Math.min(boxWidth / scale, this.naturalWidth - sourceX, this.naturalHeight - sourceY);
+    const sourceSize = Math.min(
+      boxWidth / scale,
+      this.naturalWidth - sourceX,
+      this.naturalHeight - sourceY,
+    );
 
     context.drawImage(
       image,
@@ -251,13 +255,17 @@ export class ImageCropperComponent implements AfterViewInit, OnChanges, OnDestro
     );
 
     const mimeType = this.getOutputType();
-    canvas.toBlob((blob) => {
-      if (!blob || !this.file) {
-        return;
-      }
+    canvas.toBlob(
+      (blob) => {
+        if (!blob || !this.file) {
+          return;
+        }
 
-      this.cropped.emit(new File([blob], this.getOutputName(mimeType), { type: mimeType }));
-    }, mimeType, 0.92);
+        this.cropped.emit(new File([blob], this.getOutputName(mimeType), { type: mimeType }));
+      },
+      mimeType,
+      0.92,
+    );
   }
 
   cancelCrop(): void {

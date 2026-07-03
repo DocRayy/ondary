@@ -3,9 +3,7 @@ const path = require('path');
 
 const isDev = process.env.ELECTRON_DEV === 'true';
 const iconCandidates = isDev
-  ? [
-      path.join(__dirname, '../public/images/ondary-logo-white.png'),
-    ]
+  ? [path.join(__dirname, '../public/images/ondary-logo-white.png')]
   : [
       path.join(__dirname, '../dist/ondary/browser/images/ondary-logo-white.png'),
       path.join(__dirname, '../public/images/ondary-logo-white.png'),

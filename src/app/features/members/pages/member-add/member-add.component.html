@@ -16,7 +16,9 @@
       class="grid min-w-0 gap-6 rounded-xl bg-transparent md:grid-cols-[96px_minmax(0,1fr)_auto]"
     >
       <div class="space-y-2">
-        <div class="grid h-24 w-24 place-items-center overflow-hidden rounded-md bg-[#D9D9D9] text-[#2E2E34]">
+        <div
+          class="grid h-24 w-24 place-items-center overflow-hidden rounded-md bg-[#d9d9d9] text-[#2e2e34]"
+        >
           <img
             *ngIf="form.photoPreview; else addPhotoPlaceholder"
             [src]="form.photoPreview"
@@ -27,7 +29,9 @@
             <fc-icon icon="user-linear" class="text-5xl"></fc-icon>
           </ng-template>
         </div>
-        <label class="grid h-8 w-24 cursor-pointer place-items-center rounded-md bg-[#D9D9D9] text-[10px] font-bold text-black">
+        <label
+          class="grid h-8 w-24 cursor-pointer place-items-center rounded-md bg-[#d9d9d9] text-[10px] font-bold text-black transition hover:bg-gray-200"
+        >
           Upload Photo
           <input
             type="file"
@@ -45,7 +49,7 @@
           type="text"
           required
           placeholder="Username"
-          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+          class="ondary-form-input text-white"
         />
         <input
           name="name-{{ i }}"
@@ -53,7 +57,7 @@
           type="text"
           required
           placeholder="Name"
-          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+          class="ondary-form-input text-white"
         />
         <input
           name="email-{{ i }}"
@@ -61,7 +65,7 @@
           type="email"
           required
           placeholder="Email"
-          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+          class="ondary-form-input text-white"
         />
         <input
           name="password-{{ i }}"
@@ -69,13 +73,13 @@
           type="password"
           required
           placeholder="Password"
-          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none placeholder:text-black"
+          class="ondary-form-input text-white"
         />
         <select
           name="role-{{ i }}"
           [(ngModel)]="form.role"
           required
-          class="h-14 rounded-md border-0 bg-[#D9D9D9] px-5 text-xs font-medium text-black outline-none"
+          class="ondary-form-input"
         >
           <option *ngFor="let role of roles" [value]="role">{{ role }}</option>
         </select>
@@ -84,7 +88,7 @@
       <button
         *ngIf="forms.length > 1"
         type="button"
-        class="h-10 rounded-md bg-[#D9D9D9] px-4 text-xs font-bold text-black md:self-start"
+        class="rounded-md bg-[#d9d9d9] px-4 py-3 text-xs font-bold text-black transition hover:bg-gray-200 md:self-start"
         (click)="removeForm(i)"
       >
         Remove
@@ -98,7 +102,7 @@
     <div class="grid gap-3 md:ml-[120px] md:max-w-[760px]">
       <button
         type="button"
-        class="h-12 rounded-md bg-[#D9D9D9] text-xs font-bold text-black"
+        class="ondary-form-button min-h-12"
         (click)="addMore()"
       >
         Add More
@@ -106,7 +110,7 @@
       <button
         type="submit"
         [disabled]="isSubmitting"
-        class="h-14 rounded-md bg-[#D9D9D9] text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-70"
+        class="ondary-form-button"
       >
         {{ isSubmitting ? 'Submitting...' : 'Submit' }}
       </button>
