@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const apiUrl = process.env.API_URL || 'http://localhost:3000';
+const apiUrl = process.env.API_URL || 'https://ondary.my.id';
 const production = process.env.NODE_ENV === 'production';
 const targetPath = path.join(__dirname, '..', 'src', 'environments', 'environment.ts');
 

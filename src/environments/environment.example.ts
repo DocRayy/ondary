@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:3000',
-  API_URL: 'http://localhost:3000',
+  apiUrl: 'https://ondary.my.id',
+  API_URL: 'https://ondary.my.id',
 };
