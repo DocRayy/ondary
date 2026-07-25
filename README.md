@@ -1,59 +1,136 @@
-# Ondary
+# Ondary - Real-Time Team Collaboration & Project Management System
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.4.
+**Ondary** adalah sistem manajemen proyek dan kolaborasi tim real-time berbasis Web & Desktop yang dikembangkan untuk **Folxcode**. Aplikasi ini dirancang untuk mempermudah alur kerja tim, pengorganisasian tugas, komunikasi langsung, serta pelacakan progress proyek secara terstruktur dan efisien.
 
-## Development server
+---
 
-To start a local development server, run:
+## 📋 Table of Contents
+- [Deskripsi Umum Project](#-deskripsi-umum-project)
+- [Fitur Utama](#-fitur-utama)
+- [Teknologi yang Digunakan](#-teknologi-yang-digunakan)
+- [Petunjuk Instalasi & Setup (Installation & Setup Guide)](#-petunjuk-instalasi--setup-installation--setup-guide)
+  - [Prasyarat Sistem](#1-prasyarat-sistem)
+  - [Instalasi Dependensi](#2-instalasi-dependensi)
+  - [Menjalankan Aplikasi](#3-menjalankan-aplikasi)
+  - [Build & Packaging](#4-build--packaging)
+- [Daftar Kontributor & Pengembang](#-daftar-kontributor--pengembang)
+- [Lisensi](#-lisensi)
+
+---
+
+## 📝 Deskripsi Umum Project
+
+**Ondary** diciptakan sebagai solusi manajemen proyek modern yang mendukung produktivitas dan kolaborasi tim secara real-time. Dengan integrasi antara platform web dan aplikasi desktop berbasis Electron, Ondary memberikan pengalaman pengguna yang fleksibel, cepat, dan terhubung.
+
+Sistem ini membantu tim di **Folxcode** untuk mengelola tugas, memantau milestone, bertukar informasi secara instan melalui sistem komunikasi terintegrasi, serta melihat analitik performa tim secara visual.
+
+---
+
+## ✨ Fitur Utama
+
+- 🎯 **Manajemen Proyek & Tugas**: Pembuatan, alokasi, dan pelacakan tugas tim secara terorganisir.
+- ⚡ **Kolaborasi Real-Time**: Integrasi WebSocket untuk pembaruan status dan pesan secara langsung tanpa perantara.
+- 💻 **Platform Ganda (Web & Desktop)**: Dijalankan dengan nyaman melalui peramban web maupun sebagai aplikasi desktop independen (Electron).
+- 📊 **Analitik & Dasbor Visual**: Visualisasi perkembangan proyek dengan grafik interaktif.
+- 🎨 **Antarmuka Modern & Responsif**: Dibangun menggunakan sistem komponen UI yang cepat dan elegan.
+
+---
+
+## 🛠️ Teknologi yang Digunakan
+
+- **Frontend**: [Angular](https://angular.dev/) (v21)
+- **Desktop Framework**: [Electron](https://www.electronjs.org/)
+- **UI & Styling**: [PrimeNG](https://primeng.org/), [Tailwind CSS](https://tailwindcss.com/), Lucide Icons, GSAP
+- **Real-Time Messaging**: Socket.io Client
+- **Language & Build Tools**: TypeScript, Angular CLI, Electron Builder
+
+---
+
+## 🚀 Petunjuk Instalasi & Setup (Installation & Setup Guide)
+
+### 1. Prasyarat Sistem
+
+Pastikan perangkat Anda memenuhi prasyarat berikut sebelum melanjutkan:
+- **Node.js**: v18.x atau versi LTS terbaru
+- **npm**: v9.x atau versi lebih baru
+
+---
+
+### 2. Instalasi Dependensi
+
+Kloning repository proyek ini dan pasang seluruh dependensi yang diperlukan:
 
 ```bash
+# Kloning repository
+git clone https://github.com/folxcode/ondary.git
+
+# Masuk ke direktori proyek
+cd ondary
+
+# Pasang seluruh dependensi
+npm install
+```
+
+---
+
+### 3. Menjalankan Aplikasi
+
+#### 🌐 Mode Development Web (Angular CLI)
+Untuk menjalankan aplikasi versi web di server lokal:
+
+```bash
+npm start
+# atau
 ng serve
 ```
+Akses aplikasi melalui peramban di [http://localhost:4200](http://localhost:4200). Halaman akan otomatis melakukan *live-reload* saat berkas sumber diubah.
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+#### 🖥️ Mode Development Desktop (Electron)
+Untuk menjalankan aplikasi dalam mode desktop lingkungan pengujian:
 
 ```bash
-ng generate component component-name
+npm run electron:dev
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+---
+
+### 4. Build & Packaging
+
+#### 📦 Build Versi Web Production
+Untuk melakukan kompilasi aplikasi versi produksi web:
 
 ```bash
-ng generate --help
+npm run build
 ```
+Hasil kompilasi akan tersimpan pada direktori `dist/ondary/browser`.
 
-## Building
-
-To build the project run:
+#### 💻 Packaging Aplikasi Desktop
+Untuk menghasilkan paket installer desktop executable (`.exe` / installer platform lainnya):
 
 ```bash
-ng build
+npm run package
 ```
+Berkas hasil packaging installer akan dibuat secara otomatis di direktori `dist/` atau `release/`.
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+#### 🧪 Pengujian Unit (Unit Testing)
+Untuk menjalankan uji fungsi otomatis:
 
 ```bash
-ng test
+npm test
 ```
 
-## Running end-to-end tests
+---
 
-For end-to-end (e2e) testing, run:
+## 👥 Daftar Kontributor & Pengembang
 
-```bash
-ng e2e
-```
+Project ini dikembangkan dan dikelola oleh:
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+| Kontributor | Role | Organisasi |
+| :--- | :--- | :--- |
+| **Rayyan Kheisar Syaifullah** | Lead Developer & Creator | **Folxcode** |
 
-## Additional Resources
+---
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+## 📄 Lisensi
+
+Dikembangkan untuk ekosistem **Folxcode**. Seluruh hak cipta dilindungi.
